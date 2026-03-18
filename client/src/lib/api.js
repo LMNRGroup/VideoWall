@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:4000" : "");
 
 async function parseJson(response) {
   const payload = await response.json().catch(() => ({}));
@@ -14,7 +14,7 @@ export async function uploadVideo(file) {
   const formData = new FormData();
   formData.append("media", file);
 
-  const response = await fetch(`${API_URL}/upload`, {
+  const response = await fetch(`${API_URL}/api/upload`, {
     method: "POST",
     body: formData
   });
@@ -23,7 +23,7 @@ export async function uploadVideo(file) {
 }
 
 export async function processVideo(payload) {
-  const response = await fetch(`${API_URL}/process`, {
+  const response = await fetch(`${API_URL}/api/process`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -39,7 +39,7 @@ export async function deleteUpload(uploadId) {
     return;
   }
 
-  const response = await fetch(`${API_URL}/upload/${uploadId}`, {
+  const response = await fetch(`${API_URL}/api/upload/${uploadId}`, {
     method: "DELETE"
   });
 
@@ -57,5 +57,5 @@ export function getDownloadUrl(pathname) {
     return pathname;
   }
 
-  return `${API_URL}${pathname}`;
+  return `${API_URL}${pathname.startsWith("/api/") ? pathname : `/api${pathname}`}`;
 }

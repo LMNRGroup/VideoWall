@@ -20,7 +20,7 @@ app.use(
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use(videoRoutes);
+app.use("/api", videoRoutes);
 
 if (fs.existsSync(CLIENT_DIST_DIR)) {
   app.use(express.static(CLIENT_DIST_DIR));
