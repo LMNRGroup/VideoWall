@@ -10,6 +10,7 @@ export const PORT = Number(process.env.PORT || 4000);
 export const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
 export const MAX_FILE_SIZE_MB = Number(process.env.MAX_FILE_SIZE_MB || 2048);
 export const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+export const MEDIA_TTL_MS = Number(process.env.MEDIA_TTL_MINUTES || 60) * 60 * 1000;
 
 export const TARGET_SLICE_WIDTH = 1920;
 export const TARGET_SLICE_HEIGHT = 1080;

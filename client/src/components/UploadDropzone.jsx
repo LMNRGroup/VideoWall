@@ -31,7 +31,7 @@ export default function UploadDropzone({
       onDrop={handleDrop}
     >
       <input
-        accept=".mp4,video/mp4"
+        accept=".mp4,.png,.jpg,.jpeg,video/mp4,image/png,image/jpeg"
         className="hidden"
         disabled={disabled}
         type="file"
@@ -46,9 +46,9 @@ export default function UploadDropzone({
       </div>
 
       <div className="relative z-10 mt-6 space-y-3">
-        <h2 className="text-2xl font-semibold tracking-tight text-wall-text">Upload your video</h2>
+        <h2 className="text-2xl font-semibold tracking-tight text-wall-text">Upload your media</h2>
         <p className="mx-auto max-w-md text-sm leading-6 text-wall-muted">
-          Drag and drop your `.mp4` file here or click to browse. Files up to 2GB are supported.
+          Drag and drop an `.mp4`, `.png`, `.jpg`, or `.jpeg` file here. Files up to 2GB are supported.
         </p>
       </div>
 

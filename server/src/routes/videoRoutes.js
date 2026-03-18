@@ -1,30 +1,42 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import express from "express";
-import { UPLOAD_DIR } from "../config/constants.js";
+import { MEDIA_TTL_MS, UPLOAD_DIR } from "../config/constants.js";
 import { upload } from "../middleware/upload.js";
-import { getJob, saveJob, deleteJob } from "../services/jobStore.js";
+import { deleteJob, deleteUpload, getJob, getUpload, saveJob, saveUpload } from "../services/jobStore.js";
 import { analyzeVideoDimensions } from "../services/validationService.js";
-import { processVideoWall, probeVideo } from "../services/videoService.js";
+import { processVideoWall, probeMedia } from "../services/videoService.js";
 import { removePath } from "../utils/fs.js";
 
 const router = express.Router();
 
-router.post("/upload", upload.single("video"), async (req, res, next) => {
+router.post("/upload", upload.single("media"), async (req, res, next) => {
   try {
     if (!req.file) {
-      res.status(400).json({ error: "No video uploaded." });
+      res.status(400).json({ error: "No media uploaded." });
       return;
     }
 
-    const metadata = await probeVideo(req.file.path);
+    const metadata = await probeMedia(req.file.path);
     const validation = analyzeVideoDimensions(metadata.width, metadata.height);
+    const timer = setTimeout(async () => {
+      deleteUpload(req.file.filename);
+      await removePath(req.file.path);
+    }, MEDIA_TTL_MS);
+
+    saveUpload(req.file.filename, {
+      path: req.file.path,
+      originalName: req.file.originalname,
+      mediaKind: metadata.kind,
+      timer
+    });
 
     res.json({
       uploadId: req.file.filename,
       originalName: req.file.originalname,
       metadata,
-      validation
+      validation,
+      mediaKind: metadata.kind
     });
   } catch (error) {
     if (req.file?.path) {
@@ -43,36 +55,40 @@ router.post("/process", async (req, res, next) => {
       return;
     }
 
-    const inputPath = path.join(UPLOAD_DIR, uploadId);
-    const exists = await fs
-      .access(inputPath)
-      .then(() => true)
-      .catch(() => false);
+    const uploadEntry = getUpload(uploadId);
 
-    if (!exists) {
-      res.status(404).json({ error: "Uploaded video was not found. Upload again and retry." });
+    if (!uploadEntry) {
+      res.status(404).json({ error: "Uploaded media was not found. Upload again and retry." });
       return;
     }
 
-    const metadata = await probeVideo(inputPath);
+    const metadata = await probeMedia(uploadEntry.path);
     const validation = analyzeVideoDimensions(metadata.width, metadata.height);
 
     if (validation.needsAutoFit && !autoFit) {
       res.status(400).json({
-        error: "This video requires Auto-Fit before it can be sliced.",
+        error: "This media requires Auto-Fit before it can be sliced.",
         validation
       });
       return;
     }
 
+    deleteUpload(uploadId);
+
     const job = await processVideoWall({
       uploadId,
-      originalName: originalName || uploadId,
+      originalName: originalName || uploadEntry.originalName || uploadId,
+      mediaKind: uploadEntry.mediaKind,
       validation,
       autoFit
     });
 
-    saveJob(job.jobId, job);
+    const timer = setTimeout(async () => {
+      deleteJob(job.jobId);
+      await removePath(job.cleanupDir);
+    }, MEDIA_TTL_MS);
+
+    saveJob(job.jobId, { ...job, timer });
 
     res.json({
       validation: {
@@ -88,7 +104,8 @@ router.post("/process", async (req, res, next) => {
         id: job.jobId,
         zipName: job.zipName,
         downloadUrl: `/download/${job.jobId}`
-      }
+      },
+      mediaKind: uploadEntry.mediaKind
     });
   } catch (error) {
     next(error);
@@ -125,6 +142,7 @@ router.get("/download/:jobId", async (req, res, next) => {
 
 router.delete("/upload/:uploadId", async (req, res, next) => {
   try {
+    deleteUpload(req.params.uploadId);
     await removePath(path.join(UPLOAD_DIR, req.params.uploadId));
     res.status(204).send();
   } catch (error) {

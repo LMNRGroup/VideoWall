@@ -24,7 +24,7 @@ app.use(videoRoutes);
 
 if (fs.existsSync(CLIENT_DIST_DIR)) {
   app.use(express.static(CLIENT_DIST_DIR));
-  app.get("*", (_req, res) => {
+  app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(CLIENT_DIST_DIR, "index.html"));
   });
 }

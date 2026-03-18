@@ -31,27 +31,29 @@ function runProcess(command, args) {
   });
 }
 
-export async function probeVideo(filePath) {
+export async function probeMedia(filePath) {
   const { stdout } = await runProcess("ffprobe", [
     "-v",
     "error",
-    "-select_streams",
-    "v:0",
     "-show_entries",
-    "stream=width,height,duration",
+    "stream=codec_type,width,height,duration:format=format_name",
     "-of",
     "json",
     filePath
   ]);
 
   const parsed = JSON.parse(stdout);
-  const stream = parsed.streams?.[0];
+  const stream = parsed.streams?.find((entry) => entry.codec_type === "video") || parsed.streams?.[0];
 
   if (!stream) {
-    throw new Error("Unable to detect MP4 video stream.");
+    throw new Error("Unable to detect media dimensions.");
   }
 
+  const formatName = parsed.format?.format_name || "";
+  const isVideo = formatName.includes("mp4") || path.extname(filePath).toLowerCase() === ".mp4";
+
   return {
+    kind: isVideo ? "video" : "image",
     width: Number(stream.width),
     height: Number(stream.height),
     duration: Number(stream.duration || 0)
@@ -95,7 +97,33 @@ async function createSlice({ inputPath, outputPath, validation, index, autoFit }
   ]);
 }
 
-export async function processVideoWall({ uploadId, originalName, validation, autoFit = false }) {
+async function createImageSlice({ inputPath, outputPath, validation, index, autoFit }) {
+  const baseFilter = getBaseVideoFilter(validation, autoFit);
+  const cropX = index * TARGET_SLICE_WIDTH;
+  const vf = `${baseFilter},crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0`;
+
+  await runProcess("ffmpeg", [
+    "-y",
+    "-i",
+    inputPath,
+    "-vf",
+    vf,
+    "-frames:v",
+    "1",
+    outputPath
+  ]);
+}
+
+function getImageOutputExtension(originalName) {
+  const extension = path.extname(originalName).toLowerCase();
+  if (extension === ".png") {
+    return ".png";
+  }
+
+  return ".jpg";
+}
+
+export async function processVideoWall({ uploadId, originalName, mediaKind, validation, autoFit = false }) {
   const inputPath = path.join(UPLOAD_DIR, uploadId);
   const safeBaseName = getBaseNameWithoutExtension(originalName);
   const jobId = uuidv4();
@@ -103,12 +131,28 @@ export async function processVideoWall({ uploadId, originalName, validation, aut
   const slicesDir = path.join(jobDir, "slices");
   const zipDir = path.join(jobDir, "zip");
   const zipName = `${safeBaseName}_Video_Wall.zip`;
+  const imageExtension = getImageOutputExtension(originalName);
 
   await ensureDir(slicesDir);
 
   for (let index = 0; index < validation.screens; index += 1) {
-    const outputPath = path.join(slicesDir, `${safeBaseName}_s${index + 1}.mp4`);
-    await createSlice({
+    const outputPath = path.join(
+      slicesDir,
+      `${safeBaseName}_s${index + 1}${mediaKind === "video" ? ".mp4" : imageExtension}`
+    );
+
+    if (mediaKind === "video") {
+      await createSlice({
+        inputPath,
+        outputPath,
+        validation,
+        index,
+        autoFit
+      });
+      continue;
+    }
+
+    await createImageSlice({
       inputPath,
       outputPath,
       validation,

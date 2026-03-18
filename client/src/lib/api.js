@@ -12,7 +12,7 @@ async function parseJson(response) {
 
 export async function uploadVideo(file) {
   const formData = new FormData();
-  formData.append("video", file);
+  formData.append("media", file);
 
   const response = await fetch(`${API_URL}/upload`, {
     method: "POST",
@@ -32,6 +32,20 @@ export async function processVideo(payload) {
   });
 
   return parseJson(response);
+}
+
+export async function deleteUpload(uploadId) {
+  if (!uploadId) {
+    return;
+  }
+
+  const response = await fetch(`${API_URL}/upload/${uploadId}`, {
+    method: "DELETE"
+  });
+
+  if (!response.ok && response.status !== 204) {
+    await parseJson(response);
+  }
 }
 
 export function getDownloadUrl(pathname) {

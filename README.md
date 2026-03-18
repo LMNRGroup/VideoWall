@@ -1,6 +1,6 @@
 # Video Wall Optimizer
 
-Premium web app for slicing ultra-wide MP4 videos into ready-to-deploy `1920x1080` outputs for video wall displays.
+Premium web app for slicing ultra-wide videos and images into ready-to-deploy `1920x1080` outputs for video wall displays.
 
 ## Folder Structure
 
@@ -82,6 +82,7 @@ Optional server variables:
 PORT=4000
 MAX_FILE_SIZE_MB=2048
 CLIENT_ORIGIN=http://localhost:5173
+MEDIA_TTL_MINUTES=60
 ```
 
 Optional client variable:
@@ -98,3 +99,14 @@ npm start
 ```
 
 If `client/dist` exists, the Express server serves the built frontend.
+
+## Supported Media
+
+- Video: `.mp4`
+- Images: `.png`, `.jpg`, `.jpeg`
+
+## Temporary Storage
+
+- uploaded media is stored only long enough to validate and process
+- generated slices are deleted immediately after ZIP creation
+- the ZIP is deleted after download, or automatically after the configured TTL if abandoned
