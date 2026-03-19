@@ -136,6 +136,20 @@ async function createImageSlice({ inputPath, outputPath, validation, index, auto
   ]);
 }
 
+async function createPreviewSlice({ inputPath, outputPath, validation, index, autoFit, mediaKind }) {
+  const baseFilter = getBaseVideoFilter(validation, autoFit);
+  const cropX = index * TARGET_SLICE_WIDTH;
+  const vf = `${baseFilter},crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0,scale=220:-1`;
+  const args = ["-y"];
+
+  if (mediaKind === "video") {
+    args.push("-ss", "00:00:01");
+  }
+
+  args.push("-i", inputPath, "-vf", vf, "-frames:v", "1", outputPath);
+  await runProcess("ffmpeg", args);
+}
+
 function getImageOutputExtension(originalName) {
   const extension = path.extname(originalName).toLowerCase();
   if (extension === ".png") {
@@ -151,18 +165,23 @@ export async function processVideoWall({ uploadId, originalName, mediaKind, vali
   const jobId = uuidv4();
   const jobDir = path.join(OUTPUT_DIR, jobId);
   const slicesDir = path.join(jobDir, "slices");
+  const previewsDir = path.join(jobDir, "previews");
   const zipDir = path.join(jobDir, "zip");
   const zipName = `${safeBaseName}_Video_Wall.zip`;
   const imageExtension = getImageOutputExtension(originalName);
+  const previews = [];
 
   try {
     await ensureDir(slicesDir);
+    await ensureDir(previewsDir);
 
     for (let index = 0; index < validation.screens; index += 1) {
       const outputPath = path.join(
         slicesDir,
         `${safeBaseName}_s${index + 1}${mediaKind === "video" ? ".mp4" : imageExtension}`
       );
+      const previewName = `${safeBaseName}_preview_${index + 1}.jpg`;
+      const previewPath = path.join(previewsDir, previewName);
 
       if (mediaKind === "video") {
         await createSlice({
@@ -172,16 +191,26 @@ export async function processVideoWall({ uploadId, originalName, mediaKind, vali
           index,
           autoFit
         });
-        continue;
+      } else {
+        await createImageSlice({
+          inputPath,
+          outputPath,
+          validation,
+          index,
+          autoFit
+        });
       }
 
-      await createImageSlice({
+      await createPreviewSlice({
         inputPath,
-        outputPath,
+        outputPath: previewPath,
         validation,
         index,
-        autoFit
+        autoFit,
+        mediaKind
       });
+
+      previews.push(previewName);
     }
 
     const zipPath = await createZipArchive({
@@ -197,7 +226,8 @@ export async function processVideoWall({ uploadId, originalName, mediaKind, vali
       jobId,
       zipName,
       zipPath,
-      cleanupDir: jobDir
+      cleanupDir: jobDir,
+      previews
     };
   } catch (error) {
     await removePath(inputPath);

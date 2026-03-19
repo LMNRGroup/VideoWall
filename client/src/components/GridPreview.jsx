@@ -1,4 +1,6 @@
-export default function GridPreview({ screens = 0 }) {
+import { getAssetUrl } from "../lib/api";
+
+export default function GridPreview({ screens = 0, previews = [] }) {
   const count = Math.max(0, screens);
   const columns = Math.max(1, Math.min(count || 1, 8));
 
@@ -15,11 +17,20 @@ export default function GridPreview({ screens = 0 }) {
         }}
       >
         {Array.from({ length: count || 1 }, (_, index) => (
-          <div
-            key={index}
-            className="flex aspect-video items-center justify-center rounded-[20px] border border-[#c7dcf6] bg-white text-sm font-semibold text-[#0a84ff] shadow-[0_10px_24px_rgba(10,132,255,0.08)]"
-          >
-            {`S${index + 1}`}
+          <div key={index} className="mx-auto w-full max-w-[82px]">
+            <div className="rounded-[18px] bg-[#0f1012] p-[5px] shadow-[0_12px_28px_rgba(0,0,0,0.18)]">
+              <div className="aspect-[9/16] overflow-hidden rounded-[14px] bg-[#18191d]">
+                {previews[index] ? (
+                  <img
+                    alt={`Screen preview ${index + 1}`}
+                    className="h-full w-full object-cover"
+                    src={getAssetUrl(previews[index])}
+                  />
+                ) : (
+                  <div className="h-full w-full bg-[linear-gradient(180deg,#2f3137_0%,#17181c_100%)]" />
+                )}
+              </div>
+            </div>
           </div>
         ))}
       </div>

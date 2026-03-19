@@ -121,14 +121,14 @@ export default function App() {
       window.clearInterval(progressTimer.current);
     }
 
-    setProgress(7);
+    setProgress(9);
     progressTimer.current = window.setInterval(() => {
       setProgress((current) => {
-        if (current >= 92) {
+        if (current >= 97) {
           return current;
         }
 
-        return current + Math.max(1, Math.round((92 - current) / 9));
+        return current + Math.max(1, Math.round((97 - current) / 10));
       });
     }, 280);
   }
@@ -212,6 +212,7 @@ export default function App() {
       }
 
       pollingTimer.current = window.setTimeout(() => {
+        setProgress((current) => (current < 99 ? current + 1 : current));
         pollJob(jobId);
       }, 1500);
     } catch (error) {
@@ -265,7 +266,7 @@ export default function App() {
         <header className="flex justify-center py-5">
           <div className="text-center">
             <p className="text-xs font-medium uppercase tracking-[0.42em] text-[#8e8e93]">Luminar Apps</p>
-            <h1 className="mt-4 bg-[linear-gradient(180deg,#f8e7a3_0%,#d6b45f_45%,#a67c22_100%)] bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl">
+            <h1 className="mt-4 bg-[linear-gradient(180deg,#70c1ff_0%,#0a84ff_48%,#005fcc_100%)] bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl">
               LumosDS
             </h1>
           </div>
@@ -380,7 +381,7 @@ export default function App() {
                 <div className="mx-auto mt-10 max-w-2xl">
                   <div className="h-4 overflow-hidden rounded-full bg-[#e8e8ed]">
                     <div
-                      className="h-full rounded-full transition-all duration-500"
+                      className="relative h-full rounded-full transition-all duration-500 after:absolute after:inset-0 after:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.28),transparent)] after:animate-[shimmer_1.6s_linear_infinite]"
                       style={{
                         width: `${progress}%`,
                         background: "linear-gradient(90deg, #2f8cff 0%, #0a84ff 50%, #4da3ff 100%)"
@@ -410,7 +411,7 @@ export default function App() {
                 </p>
 
                 <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
-                  <GridPreview screens={appState.validation?.screens || 0} />
+                  <GridPreview previews={appState.job?.previews || []} screens={appState.validation?.screens || 0} />
                 </div>
 
                 <div className="mt-8 text-sm font-medium text-[#6e6e73]">{appState.job?.zipName}</div>

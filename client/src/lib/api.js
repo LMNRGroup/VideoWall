@@ -87,3 +87,7 @@ export function getDownloadUrl(pathname) {
 
   return `${API_URL}${pathname.startsWith("/api/") ? pathname : `/api${pathname}`}`;
 }
+
+export function getAssetUrl(pathname) {
+  return getDownloadUrl(pathname);
+}

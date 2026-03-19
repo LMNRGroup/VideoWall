@@ -90,6 +90,7 @@ router.post("/process", async (req, res, next) => {
       validation: normalizedValidation,
       zipName: null,
       downloadUrl: null,
+      previews: [],
       error: null,
       cleanupDir: null,
       timer: null
@@ -117,6 +118,7 @@ router.post("/process", async (req, res, next) => {
           status: "completed",
           zipName: completedJob.zipName,
           downloadUrl: `/download/${processingJob.id}`,
+          previews: completedJob.previews.map((previewName) => `/preview/${processingJob.id}/${previewName}`),
           cleanupDir: completedJob.cleanupDir,
           timer
         });
@@ -168,7 +170,8 @@ router.get("/jobs/:jobId", async (req, res) => {
         id: req.params.jobId,
         status: "completed",
         zipName: job.zipName,
-        downloadUrl: job.downloadUrl
+        downloadUrl: job.downloadUrl,
+        previews: job.previews || []
       },
       validation: job.validation,
       mediaKind: job.mediaKind
@@ -184,6 +187,22 @@ router.get("/jobs/:jobId", async (req, res) => {
     validation: job.validation,
     mediaKind: job.mediaKind
   });
+});
+
+router.get("/preview/:jobId/:fileName", async (req, res, next) => {
+  try {
+    const job = getJob(req.params.jobId);
+
+    if (!job || job.status !== "completed") {
+      res.status(404).json({ error: "Preview was not found or has expired." });
+      return;
+    }
+
+    const previewPath = path.join(job.cleanupDir, "previews", req.params.fileName);
+    res.sendFile(previewPath);
+  } catch (error) {
+    next(error);
+  }
 });
 
 router.get("/download/:jobId", async (req, res, next) => {

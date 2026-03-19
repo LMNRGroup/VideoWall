@@ -41,3 +41,12 @@ body {
   background: rgba(29, 29, 31, 0.16);
   border-radius: 999px;
 }
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
