@@ -57,6 +57,11 @@ export async function processVideo(payload) {
   return parseJson(response);
 }
 
+export async function getJobStatus(jobId) {
+  const response = await fetch(`${API_URL}/api/jobs/${jobId}`);
+  return parseJson(response);
+}
+
 export async function deleteUpload(uploadId) {
   if (!uploadId) {
     return;

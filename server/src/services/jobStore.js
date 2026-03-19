@@ -5,6 +5,18 @@ export function saveJob(jobId, payload) {
   jobs.set(jobId, payload);
 }
 
+export function updateJob(jobId, patch) {
+  const current = jobs.get(jobId);
+  if (!current) {
+    return;
+  }
+
+  jobs.set(jobId, {
+    ...current,
+    ...patch
+  });
+}
+
 export function getJob(jobId) {
   return jobs.get(jobId);
 }

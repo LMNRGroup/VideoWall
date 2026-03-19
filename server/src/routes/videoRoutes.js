@@ -3,7 +3,7 @@ import path from "node:path";
 import express from "express";
 import { MEDIA_TTL_MS, UPLOAD_DIR } from "../config/constants.js";
 import { upload } from "../middleware/upload.js";
-import { deleteJob, deleteUpload, getJob, getUpload, saveJob, saveUpload } from "../services/jobStore.js";
+import { deleteJob, deleteUpload, getJob, getUpload, saveJob, saveUpload, updateJob } from "../services/jobStore.js";
 import { analyzeVideoDimensions } from "../services/validationService.js";
 import { processVideoWall, probeMedia } from "../services/videoService.js";
 import { removePath } from "../utils/fs.js";
@@ -73,37 +73,66 @@ router.post("/process", async (req, res, next) => {
       return;
     }
 
+    const normalizedValidation = {
+      ...validation,
+      caseType: autoFit ? "auto-fit" : validation.caseType,
+      needsAutoFit: false,
+      message: autoFit
+        ? "Auto-Fit applied successfully. Video has been centered, optimized, and sliced for your wall."
+        : validation.message,
+      status: validation.caseType === "smaller" ? "warning" : "ready"
+    };
+
+    const processingJob = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      status: "processing",
+      mediaKind: uploadEntry.mediaKind,
+      validation: normalizedValidation,
+      zipName: null,
+      downloadUrl: null,
+      error: null,
+      cleanupDir: null,
+      timer: null
+    };
+
+    saveJob(processingJob.id, processingJob);
     deleteUpload(uploadId);
 
-    const job = await processVideoWall({
-      uploadId,
-      originalName: originalName || uploadEntry.originalName || uploadId,
-      mediaKind: uploadEntry.mediaKind,
-      validation,
-      autoFit
-    });
+    void (async () => {
+      try {
+        const completedJob = await processVideoWall({
+          uploadId,
+          originalName: originalName || uploadEntry.originalName || uploadId,
+          mediaKind: uploadEntry.mediaKind,
+          validation,
+          autoFit
+        });
 
-    const timer = setTimeout(async () => {
-      deleteJob(job.jobId);
-      await removePath(job.cleanupDir);
-    }, MEDIA_TTL_MS);
+        const timer = setTimeout(async () => {
+          deleteJob(processingJob.id);
+          await removePath(completedJob.cleanupDir);
+        }, MEDIA_TTL_MS);
 
-    saveJob(job.jobId, { ...job, timer });
+        updateJob(processingJob.id, {
+          status: "completed",
+          zipName: completedJob.zipName,
+          downloadUrl: `/download/${processingJob.id}`,
+          cleanupDir: completedJob.cleanupDir,
+          timer
+        });
+      } catch (error) {
+        updateJob(processingJob.id, {
+          status: "failed",
+          error: error.message || "Processing failed."
+        });
+      }
+    })();
 
     res.json({
-      validation: {
-        ...validation,
-        caseType: autoFit ? "auto-fit" : validation.caseType,
-        needsAutoFit: false,
-        message: autoFit
-          ? "Auto-Fit applied successfully. Video has been centered, optimized, and sliced for your wall."
-          : validation.message,
-        status: validation.caseType === "smaller" ? "warning" : "ready"
-      },
+      validation: normalizedValidation,
       job: {
-        id: job.jobId,
-        zipName: job.zipName,
-        downloadUrl: `/download/${job.jobId}`
+        id: processingJob.id,
+        status: "processing"
       },
       mediaKind: uploadEntry.mediaKind
     });
@@ -112,18 +141,65 @@ router.post("/process", async (req, res, next) => {
   }
 });
 
+router.get("/jobs/:jobId", async (req, res) => {
+  const job = getJob(req.params.jobId);
+
+  if (!job) {
+    res.status(404).json({ error: "Processing job was not found or has expired." });
+    return;
+  }
+
+  if (job.status === "failed") {
+    res.status(200).json({
+      job: {
+        id: req.params.jobId,
+        status: "failed",
+        error: job.error
+      },
+      validation: job.validation,
+      mediaKind: job.mediaKind
+    });
+    return;
+  }
+
+  if (job.status === "completed") {
+    res.status(200).json({
+      job: {
+        id: req.params.jobId,
+        status: "completed",
+        zipName: job.zipName,
+        downloadUrl: job.downloadUrl
+      },
+      validation: job.validation,
+      mediaKind: job.mediaKind
+    });
+    return;
+  }
+
+  res.status(200).json({
+    job: {
+      id: req.params.jobId,
+      status: "processing"
+    },
+    validation: job.validation,
+    mediaKind: job.mediaKind
+  });
+});
+
 router.get("/download/:jobId", async (req, res, next) => {
   try {
     const job = getJob(req.params.jobId);
 
-    if (!job) {
+    if (!job || job.status !== "completed" || !job.downloadUrl) {
       res.status(404).json({ error: "Download has expired or does not exist." });
       return;
     }
 
-    res.download(job.zipPath, job.zipName, async (error) => {
+    const zipPath = path.join(job.cleanupDir, "zip", job.zipName);
+
+    res.download(zipPath, job.zipName, async (error) => {
       const cleanup = async () => {
-        deleteJob(job.jobId);
+        deleteJob(req.params.jobId);
         await removePath(job.cleanupDir);
       };
 

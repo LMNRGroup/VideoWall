@@ -3,7 +3,7 @@ import { AlertTriangle, ArrowLeft, Download, LoaderCircle, RotateCcw, Wand2 } fr
 import GridPreview from "./components/GridPreview";
 import InvalidModal from "./components/InvalidModal";
 import UploadDropzone from "./components/UploadDropzone";
-import { deleteUpload, getDownloadUrl, processVideo, uploadVideo } from "./lib/api";
+import { deleteUpload, getDownloadUrl, getJobStatus, processVideo, uploadVideo } from "./lib/api";
 
 const INITIAL_STATE = {
   uploadId: null,
@@ -41,11 +41,15 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState("");
   const [progress, setProgress] = useState(0);
   const progressTimer = useRef(null);
+  const pollingTimer = useRef(null);
 
   useEffect(() => {
     return () => {
       if (progressTimer.current) {
         window.clearInterval(progressTimer.current);
+      }
+      if (pollingTimer.current) {
+        window.clearTimeout(pollingTimer.current);
       }
     };
   }, []);
@@ -86,6 +90,10 @@ export default function App() {
     if (progressTimer.current) {
       window.clearInterval(progressTimer.current);
       progressTimer.current = null;
+    }
+    if (pollingTimer.current) {
+      window.clearTimeout(pollingTimer.current);
+      pollingTimer.current = null;
     }
 
     const uploadId = appState.uploadId;
@@ -150,23 +158,78 @@ export default function App() {
         originalName: appState.originalName,
         autoFit
       });
-
-      completeProgress();
       setAppState((current) => ({
         ...current,
         validation: data.validation,
         mediaKind: data.mediaKind || current.mediaKind,
         job: data.job
       }));
+      pollJob(data.job.id);
     } catch (error) {
       setErrorMessage(error.message);
       setProgress(0);
-    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  async function pollJob(jobId) {
+    try {
+      const data = await getJobStatus(jobId);
+
+      if (data.job.status === "completed") {
+        if (pollingTimer.current) {
+          window.clearTimeout(pollingTimer.current);
+          pollingTimer.current = null;
+        }
+        completeProgress();
+        setIsProcessing(false);
+        setAppState((current) => ({
+          ...current,
+          validation: data.validation,
+          mediaKind: data.mediaKind || current.mediaKind,
+          job: data.job
+        }));
+        return;
+      }
+
+      if (data.job.status === "failed") {
+        if (pollingTimer.current) {
+          window.clearTimeout(pollingTimer.current);
+          pollingTimer.current = null;
+        }
+        if (progressTimer.current) {
+          window.clearInterval(progressTimer.current);
+          progressTimer.current = null;
+        }
+        setProgress(0);
+        setErrorMessage(data.job.error || "Processing failed.");
+        setIsProcessing(false);
+        setAppState((current) => ({
+          ...current,
+          job: null
+        }));
+        return;
+      }
+
+      pollingTimer.current = window.setTimeout(() => {
+        pollJob(jobId);
+      }, 1500);
+    } catch (error) {
+      if (pollingTimer.current) {
+        window.clearTimeout(pollingTimer.current);
+        pollingTimer.current = null;
+      }
       if (progressTimer.current) {
         window.clearInterval(progressTimer.current);
         progressTimer.current = null;
       }
+      setProgress(0);
+      setErrorMessage(error.message || "Processing status could not be checked.");
       setIsProcessing(false);
+      setAppState((current) => ({
+        ...current,
+        job: null
+      }));
     }
   }
 
@@ -202,7 +265,9 @@ export default function App() {
         <header className="flex justify-center py-5">
           <div className="text-center">
             <p className="text-xs font-medium uppercase tracking-[0.42em] text-[#8e8e93]">Luminar Apps</p>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#3a3a3c] sm:text-4xl">LumosDS</h1>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#a9aaae] [text-shadow:1px_1px_0_rgba(82,82,91,0.18)] sm:text-4xl">
+              LumosDS
+            </h1>
           </div>
         </header>
 

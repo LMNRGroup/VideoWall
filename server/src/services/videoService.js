@@ -155,47 +155,53 @@ export async function processVideoWall({ uploadId, originalName, mediaKind, vali
   const zipName = `${safeBaseName}_Video_Wall.zip`;
   const imageExtension = getImageOutputExtension(originalName);
 
-  await ensureDir(slicesDir);
+  try {
+    await ensureDir(slicesDir);
 
-  for (let index = 0; index < validation.screens; index += 1) {
-    const outputPath = path.join(
-      slicesDir,
-      `${safeBaseName}_s${index + 1}${mediaKind === "video" ? ".mp4" : imageExtension}`
-    );
+    for (let index = 0; index < validation.screens; index += 1) {
+      const outputPath = path.join(
+        slicesDir,
+        `${safeBaseName}_s${index + 1}${mediaKind === "video" ? ".mp4" : imageExtension}`
+      );
 
-    if (mediaKind === "video") {
-      await createSlice({
+      if (mediaKind === "video") {
+        await createSlice({
+          inputPath,
+          outputPath,
+          validation,
+          index,
+          autoFit
+        });
+        continue;
+      }
+
+      await createImageSlice({
         inputPath,
         outputPath,
         validation,
         index,
         autoFit
       });
-      continue;
     }
 
-    await createImageSlice({
-      inputPath,
-      outputPath,
-      validation,
-      index,
-      autoFit
+    const zipPath = await createZipArchive({
+      sourceDir: slicesDir,
+      outputDir: zipDir,
+      zipName
     });
+
+    await removePath(slicesDir);
+    await removePath(inputPath);
+
+    return {
+      jobId,
+      zipName,
+      zipPath,
+      cleanupDir: jobDir
+    };
+  } catch (error) {
+    await removePath(inputPath);
+    await removePath(jobDir);
+    throw error;
   }
-
-  const zipPath = await createZipArchive({
-    sourceDir: slicesDir,
-    outputDir: zipDir,
-    zipName
-  });
-
-  await removePath(slicesDir);
-  await removePath(inputPath);
-
-  return {
-    jobId,
-    zipName,
-    zipPath,
-    cleanupDir: jobDir
-  };
 }
