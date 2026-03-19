@@ -190,7 +190,7 @@ export default function App() {
   const showExport = !!appState.job && !isProcessing;
 
   return (
-    <div className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
+    <div className="min-h-screen bg-[#f5f5f7] text-[#3a3a3c]">
       <InvalidModal
         message={appState.validation?.message}
         open={modalOpen}
@@ -199,12 +199,10 @@ export default function App() {
       />
 
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-8 lg:px-10">
-        <header className="flex items-center justify-between py-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#6e6e73]">Luminar Apps</p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#1d1d1f] sm:text-4xl">
-              Video Wall Optimizer
-            </h1>
+        <header className="flex justify-center py-5">
+          <div className="text-center">
+            <p className="text-xs font-medium uppercase tracking-[0.42em] text-[#8e8e93]">Luminar Apps</p>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#3a3a3c] sm:text-4xl">LumosDS</h1>
           </div>
         </header>
 
@@ -215,8 +213,8 @@ export default function App() {
                 <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-10">
                   <div className="mx-auto max-w-2xl text-center">
                     <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Upload Media</p>
-                    <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
-                      Build your video wall in one pass
+                    <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#3a3a3c] sm:text-5xl">
+                      Create a Video Wall.
                     </h2>
                     <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#6e6e73]">
                       Upload one video or image and the system will detect the wall layout, slice every screen, and
@@ -258,7 +256,7 @@ export default function App() {
             {showDetected && (
               <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 text-center shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-12">
                 <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Detected Layout</p>
-                <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
+                <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#3a3a3c] sm:text-5xl">
                   {formatDetection(appState.validation)}
                 </h2>
                 <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#515154]">
@@ -275,7 +273,7 @@ export default function App() {
 
                 <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
                   <button
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#1d1d1f] transition hover:bg-[#f5f5f7]"
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#3a3a3c] transition hover:bg-[#f5f5f7]"
                     type="button"
                     onClick={() => resetFlow({ removeRemoteUpload: true })}
                   >
@@ -308,7 +306,7 @@ export default function App() {
                   <LoaderCircle className="h-8 w-8 animate-spin" />
                 </div>
                 <p className="mt-6 text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Generating</p>
-                <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
+                <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#3a3a3c] sm:text-5xl">
                   Processing your media
                 </h2>
                 <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#515154]">
@@ -340,7 +338,7 @@ export default function App() {
             {showExport && (
               <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 text-center shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-12">
                 <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Export Ready</p>
-                <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
+                <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#3a3a3c] sm:text-5xl">
                   Your video wall is ready
                 </h2>
                 <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#515154]">
@@ -362,7 +360,7 @@ export default function App() {
                     Export Video Wall
                   </a>
                   <button
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#1d1d1f] transition hover:bg-[#f5f5f7]"
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#3a3a3c] transition hover:bg-[#f5f5f7]"
                     type="button"
                     onClick={() => resetFlow()}
                   >
