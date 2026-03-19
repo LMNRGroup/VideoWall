@@ -3,8 +3,8 @@ export default function GridPreview({ screens = 0 }) {
   const columns = Math.max(1, Math.min(count || 1, 8));
 
   return (
-    <div>
-      <div className="mb-4 rounded-full border border-white/10 px-3 py-1 text-xs text-wall-muted w-fit">
+    <div className="text-left">
+      <div className="mb-5 w-fit rounded-full border border-[#d2d2d7] bg-white px-3 py-1 text-xs font-medium text-[#6e6e73]">
         {count || 0} screens
       </div>
       <div
@@ -17,9 +17,7 @@ export default function GridPreview({ screens = 0 }) {
         {Array.from({ length: count || 1 }, (_, index) => (
           <div
             key={index}
-            className={`flex aspect-video items-center justify-center rounded-2xl border border-white/10 text-sm font-medium transition ${
-              "bg-white/[0.05] text-wall-text"
-            }`}
+            className="flex aspect-video items-center justify-center rounded-[20px] border border-[#c7dcf6] bg-white text-sm font-semibold text-[#0a84ff] shadow-[0_10px_24px_rgba(10,132,255,0.08)]"
           >
             {`S${index + 1}`}
           </div>

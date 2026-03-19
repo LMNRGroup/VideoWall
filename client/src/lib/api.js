@@ -10,16 +10,39 @@ async function parseJson(response) {
   return payload;
 }
 
-export async function uploadVideo(file) {
+export async function uploadVideo(file, onProgress) {
   const formData = new FormData();
   formData.append("media", file);
 
-  const response = await fetch(`${API_URL}/api/upload`, {
-    method: "POST",
-    body: formData
-  });
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_URL}/api/upload`);
 
-  return parseJson(response);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && typeof onProgress === "function") {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    xhr.onload = async () => {
+      try {
+        const text = xhr.responseText || "{}";
+        const payload = JSON.parse(text);
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(payload);
+          return;
+        }
+
+        reject(new Error(payload.error || "Request failed."));
+      } catch (_error) {
+        reject(new Error("Upload response could not be parsed."));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Upload failed."));
+    xhr.send(formData);
+  });
 }
 
 export async function processVideo(payload) {

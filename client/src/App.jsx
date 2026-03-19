@@ -25,16 +25,17 @@ function formatDimensions(metadata) {
 
 function formatDetection(validation) {
   if (!validation) {
-    return "Upload a video or image to detect your screen layout.";
+    return "";
   }
 
-  return `Detected: ${validation.screens} Screen Video Wall (${validation.targetWidth}x${validation.targetHeight})`;
+  return `${validation.screens} screen layout detected`;
 }
 
 export default function App() {
   const [appState, setAppState] = useState(INITIAL_STATE);
   const [dragActive, setDragActive] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -56,11 +57,13 @@ export default function App() {
 
     setErrorMessage("");
     setIsUploading(true);
+    setUploadProgress(0);
     setModalOpen(false);
     setProgress(0);
 
     try {
-      const data = await uploadVideo(file);
+      const data = await uploadVideo(file, setUploadProgress);
+      setUploadProgress(100);
       setAppState({
         uploadId: data.uploadId,
         originalName: data.originalName,
@@ -73,6 +76,7 @@ export default function App() {
     } catch (error) {
       setAppState(INITIAL_STATE);
       setErrorMessage(error.message);
+      setUploadProgress(0);
     } finally {
       setIsUploading(false);
     }
@@ -89,6 +93,7 @@ export default function App() {
     setAppState(INITIAL_STATE);
     setDragActive(false);
     setIsUploading(false);
+    setUploadProgress(0);
     setIsProcessing(false);
     setModalOpen(false);
     setErrorMessage("");
@@ -108,16 +113,16 @@ export default function App() {
       window.clearInterval(progressTimer.current);
     }
 
-    setProgress(8);
+    setProgress(7);
     progressTimer.current = window.setInterval(() => {
       setProgress((current) => {
         if (current >= 92) {
           return current;
         }
 
-        return current + Math.max(1, Math.round((92 - current) / 8));
+        return current + Math.max(1, Math.round((92 - current) / 9));
       });
-    }, 320);
+    }, 280);
   }
 
   function completeProgress() {
@@ -180,12 +185,12 @@ export default function App() {
 
   const downloadUrl = getDownloadUrl(appState.job?.downloadUrl);
   const showLanding = !appState.validation && !isProcessing && !appState.job;
-  const showReadyToGenerate = !!appState.validation && !isProcessing && !appState.job;
+  const showDetected = !!appState.validation && !isProcessing && !appState.job;
   const showProcessing = isProcessing;
   const showExport = !!appState.job && !isProcessing;
 
   return (
-    <div className="min-h-screen bg-wall-bg text-wall-text">
+    <div className="min-h-screen bg-[#f5f5f7] text-[#1d1d1f]">
       <InvalidModal
         message={appState.validation?.message}
         open={modalOpen}
@@ -193,78 +198,103 @@ export default function App() {
         onConfirm={() => runProcessing(true)}
       />
 
-      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-5 py-6 sm:px-8 lg:px-10">
-        <header className="mb-8 flex items-center justify-between rounded-[28px] border border-white/10 bg-white/[0.03] px-6 py-5">
+      <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-8 lg:px-10">
+        <header className="flex items-center justify-between py-4">
           <div>
-            <p className="text-sm uppercase tracking-[0.26em] text-wall-muted">Luminar Apps</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Video Wall Optimizer</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#6e6e73]">Luminar Apps</p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#1d1d1f] sm:text-4xl">
+              Video Wall Optimizer
+            </h1>
           </div>
         </header>
 
         <main className="flex flex-1 items-center justify-center">
-          <section className="w-full max-w-5xl space-y-6">
-            {(showLanding || showReadyToGenerate) && (
-              <div className="glass rounded-[36px] border border-white/10 p-6 shadow-glow sm:p-8">
-                <div className="mb-6 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.24em] text-wall-muted">Upload Media</p>
-                    <h2 className="mt-2 text-3xl font-semibold tracking-tight text-wall-text">
-                      {showReadyToGenerate ? "Ready to generate your video wall" : "Start with one media file"}
+          <section className="w-full max-w-4xl">
+            {showLanding && (
+              <div className="space-y-6">
+                <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-10">
+                  <div className="mx-auto max-w-2xl text-center">
+                    <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Upload Media</p>
+                    <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
+                      Build your video wall in one pass
                     </h2>
+                    <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#6e6e73]">
+                      Upload one video or image and the system will detect the wall layout, slice every screen, and
+                      prepare a ZIP export.
+                    </p>
                   </div>
 
-                  {(isUploading || isProcessing) && (
-                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-sm text-wall-muted">
-                      <LoaderCircle className="h-4 w-4 animate-spin" />
-                      {isUploading ? "Uploading..." : "Processing..."}
+                  <div className="mx-auto mt-10 max-w-2xl">
+                    <UploadDropzone
+                      disabled={isUploading}
+                      dragActive={dragActive}
+                      fileName={appState.fileName}
+                      isUploading={isUploading}
+                      progress={uploadProgress}
+                      onDragStateChange={setDragActive}
+                      onFileSelect={handleFileSelect}
+                    />
+                  </div>
+
+                  {errorMessage && (
+                    <div className="mx-auto mt-6 flex max-w-2xl items-start gap-3 rounded-[28px] border border-[#f5c2c7] bg-[#fff2f4] p-4 text-sm text-[#b42318]">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                      <span>{errorMessage}</span>
                     </div>
                   )}
                 </div>
 
-                <UploadDropzone
-                  disabled={isUploading || isProcessing}
-                  dragActive={dragActive}
-                  fileName={appState.fileName}
-                  onDragStateChange={setDragActive}
-                  onFileSelect={handleFileSelect}
-                />
-
-                {appState.validation && (
-                  <div className="mt-6 rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-                    <p className="text-sm uppercase tracking-[0.22em] text-wall-muted">Detected Layout</p>
-                    <h3 className="mt-3 text-2xl font-semibold text-wall-text">{formatDetection(appState.validation)}</h3>
-                    <p className="mt-3 text-sm leading-6 text-wall-muted">
-                      {appState.validation.message}
-                    </p>
-                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-white/40">
-                      Source: {formatDimensions(appState.metadata)}
-                      {appState.mediaKind ? ` • ${appState.mediaKind}` : ""}
-                    </p>
-
-                    <div className="mt-6 flex gap-3">
-                      <button
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-medium text-wall-text transition hover:bg-white/[0.08]"
-                        type="button"
-                        onClick={() => resetFlow({ removeRemoteUpload: true })}
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                        Go Back
-                      </button>
-                      <button
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-wall-text px-5 py-3 text-sm font-semibold text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={isUploading || isProcessing}
-                        type="button"
-                        onClick={handleGenerate}
-                      >
-                        <Wand2 className="h-4 w-4" />
-                        Generate Video Wall
-                      </button>
-                    </div>
+                <div className="mx-auto max-w-3xl rounded-[32px] border border-[#d2d2d7] bg-white px-8 py-7 text-center shadow-[0_18px_48px_rgba(0,0,0,0.06)]">
+                  <p className="text-sm font-medium uppercase tracking-[0.24em] text-[#6e6e73]">Best Results</p>
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-sm text-[#6e6e73]">
+                    <span className="rounded-full bg-[#f5f5f7] px-4 py-2">2 screens {"->"} 3840x1080</span>
+                    <span className="rounded-full bg-[#f5f5f7] px-4 py-2">4 screens {"->"} 7680x1080</span>
+                    <span className="rounded-full bg-[#f5f5f7] px-4 py-2">8 screens {"->"} 15360x1080</span>
                   </div>
-                )}
+                </div>
+              </div>
+            )}
+
+            {showDetected && (
+              <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 text-center shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-12">
+                <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Detected Layout</p>
+                <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
+                  {formatDetection(appState.validation)}
+                </h2>
+                <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#515154]">
+                  {appState.validation?.message}
+                </p>
+                <div className="mt-6 text-sm font-medium text-[#6e6e73]">
+                  {formatDimensions(appState.metadata)}
+                  {appState.mediaKind ? ` • ${appState.mediaKind}` : ""}
+                </div>
+
+                <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
+                  <GridPreview screens={appState.validation?.screens || 0} />
+                </div>
+
+                <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#1d1d1f] transition hover:bg-[#f5f5f7]"
+                    type="button"
+                    onClick={() => resetFlow({ removeRemoteUpload: true })}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Go Back
+                  </button>
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0071e3] px-8 py-3 text-sm font-semibold text-white shadow-[0_18px_30px_rgba(0,113,227,0.25)] transition hover:bg-[#0077ed] disabled:cursor-not-allowed disabled:bg-[#7ab8f5]"
+                    disabled={isProcessing}
+                    type="button"
+                    onClick={handleGenerate}
+                  >
+                    <Wand2 className="h-4 w-4" />
+                    Generate Video Wall
+                  </button>
+                </div>
 
                 {errorMessage && (
-                  <div className="mt-5 flex items-start gap-3 rounded-[22px] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-200">
+                  <div className="mx-auto mt-6 flex max-w-2xl items-start gap-3 rounded-[28px] border border-[#f5c2c7] bg-[#fff2f4] p-4 text-left text-sm text-[#b42318]">
                     <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
                     <span>{errorMessage}</span>
                   </div>
@@ -273,94 +303,79 @@ export default function App() {
             )}
 
             {showProcessing && (
-              <div className="glass rounded-[36px] border border-white/10 p-8 shadow-glow">
-                <p className="text-sm uppercase tracking-[0.24em] text-wall-muted">Generating</p>
-                <h2 className="mt-3 text-3xl font-semibold tracking-tight text-wall-text">Processing your video wall</h2>
-                <p className="mt-4 max-w-2xl text-sm leading-6 text-wall-muted">
-                  Keep this page open while your media is optimized, sliced, and prepared for export.
+              <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-10 text-center shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-12">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f3ff] text-[#0071e3]">
+                  <LoaderCircle className="h-8 w-8 animate-spin" />
+                </div>
+                <p className="mt-6 text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Generating</p>
+                <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
+                  Processing your media
+                </h2>
+                <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#515154]">
+                  Your wall is being prepared now. Keep this page open while the slices and ZIP export are generated.
                 </p>
 
-                <div className="mt-8 h-4 overflow-hidden rounded-full bg-white/[0.06]">
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${progress}%`,
-                      background:
-                        "linear-gradient(90deg, rgba(117,88,255,0.95) 0%, rgba(171,92,255,0.95) 50%, rgba(223,111,255,0.95) 100%)"
-                    }}
-                  />
+                <div className="mx-auto mt-10 max-w-2xl">
+                  <div className="h-4 overflow-hidden rounded-full bg-[#e8e8ed]">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${progress}%`,
+                        background: "linear-gradient(90deg, #2f8cff 0%, #0a84ff 50%, #4da3ff 100%)"
+                      }}
+                    />
+                  </div>
+                  <p className="mt-4 text-sm font-medium text-[#515154]">{progress}% complete</p>
                 </div>
 
-                <p className="mt-4 text-sm text-wall-muted">{progress}% complete</p>
+                {errorMessage && (
+                  <div className="mx-auto mt-6 flex max-w-2xl items-start gap-3 rounded-[28px] border border-[#f5c2c7] bg-[#fff2f4] p-4 text-left text-sm text-[#b42318]">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
               </div>
             )}
 
             {showExport && (
-              <div className="glass rounded-[36px] border border-white/10 p-8 shadow-glow">
-                <p className="text-sm uppercase tracking-[0.24em] text-wall-muted">Export Ready</p>
-                <h2 className="mt-3 text-3xl font-semibold tracking-tight text-wall-text">Your video wall is ready</h2>
-                <p className="mt-4 max-w-2xl text-sm leading-6 text-wall-muted">
-                  Review the detected screen layout and export the ZIP package to your computer.
+              <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 text-center shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-12">
+                <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Export Ready</p>
+                <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#1d1d1f] sm:text-5xl">
+                  Your video wall is ready
+                </h2>
+                <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#515154]">
+                  Review the detected layout and export the ZIP package to your computer.
                 </p>
 
-                <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-                  <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-                    <p className="text-sm uppercase tracking-[0.22em] text-wall-muted">Screen Preview</p>
-                    <h3 className="mt-3 text-2xl font-semibold text-wall-text">
-                      {formatDetection(appState.validation)}
-                    </h3>
-                    <p className="mt-3 text-sm leading-6 text-wall-muted">
-                      {appState.job.zipName}
-                    </p>
-                    <div className="mt-6">
-                      <GridPreview screens={appState.validation?.screens || 0} />
-                    </div>
-                  </div>
-
-                  <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-                    <p className="text-sm uppercase tracking-[0.22em] text-wall-muted">Export</p>
-                    <h3 className="mt-3 text-2xl font-semibold text-wall-text">Download ZIP</h3>
-                    <p className="mt-3 text-sm leading-6 text-wall-muted">
-                      The package is temporary and will be cleaned up after download or expiry.
-                    </p>
-
-                    <div className="mt-6 flex flex-col gap-3">
-                      <a
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-wall-text px-5 py-3 text-sm font-semibold text-black transition hover:opacity-90"
-                        href={downloadUrl}
-                      >
-                        <Download className="h-4 w-4" />
-                        Export Video Wall
-                      </a>
-
-                      <button
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-medium text-wall-text transition hover:bg-white/[0.08]"
-                        type="button"
-                        onClick={() => resetFlow()}
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                        Generate Another Video Wall
-                      </button>
-                    </div>
-                  </div>
+                <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
+                  <GridPreview screens={appState.validation?.screens || 0} />
                 </div>
-              </div>
-            )}
 
-            {(showLanding || showReadyToGenerate) && (
-              <div className="glass rounded-[28px] border border-white/10 p-6 shadow-glow">
-              <p className="text-sm font-medium uppercase tracking-[0.24em] text-wall-muted">Best Results</p>
-              <div className="mt-5 space-y-4 text-sm leading-6 text-wall-muted">
-                <p>2 screens {"->"} 3840x1080</p>
-                <p>4 screens {"->"} 7680x1080</p>
-                <p>8 screens {"->"} 15360x1080</p>
-              </div>
+                <div className="mt-8 text-sm font-medium text-[#6e6e73]">{appState.job?.zipName}</div>
+
+                <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+                  <a
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0071e3] px-8 py-3 text-sm font-semibold text-white shadow-[0_18px_30px_rgba(0,113,227,0.25)] transition hover:bg-[#0077ed]"
+                    href={downloadUrl}
+                  >
+                    <Download className="h-4 w-4" />
+                    Export Video Wall
+                  </a>
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#1d1d1f] transition hover:bg-[#f5f5f7]"
+                    type="button"
+                    onClick={() => resetFlow()}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Generate Another
+                  </button>
+                </div>
               </div>
             )}
           </section>
         </main>
 
-        <footer className="pt-8 text-center text-xs text-wall-muted">© 2026 Luminar Apps Puerto Rico</footer>
+        <footer className="pt-8 text-center text-[11px] font-medium text-[#86868b]">© 2026 Luminar Apps Puerto Rico</footer>
       </div>
     </div>
   );
