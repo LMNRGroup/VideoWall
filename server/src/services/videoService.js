@@ -142,10 +142,6 @@ async function createPreviewSlice({ inputPath, outputPath, validation, index, au
   const vf = `${baseFilter},crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0,scale=220:-1`;
   const args = ["-y"];
 
-  if (mediaKind === "video") {
-    args.push("-ss", "00:00:01");
-  }
-
   args.push("-i", inputPath, "-vf", vf, "-frames:v", "1", outputPath);
   await runProcess("ffmpeg", args);
 }
@@ -201,16 +197,18 @@ export async function processVideoWall({ uploadId, originalName, mediaKind, vali
         });
       }
 
-      await createPreviewSlice({
-        inputPath,
-        outputPath: previewPath,
-        validation,
-        index,
-        autoFit,
-        mediaKind
-      });
+      if (mediaKind !== "video") {
+        await createPreviewSlice({
+          inputPath,
+          outputPath: previewPath,
+          validation,
+          index,
+          autoFit,
+          mediaKind
+        });
 
-      previews.push(previewName);
+        previews.push(previewName);
+      }
     }
 
     const zipPath = await createZipArchive({
