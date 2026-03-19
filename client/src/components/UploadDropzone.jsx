@@ -39,7 +39,13 @@ export default function UploadDropzone({
         className="hidden"
         disabled={disabled}
         type="file"
-        onChange={(event) => onFileSelect(event.target.files?.[0])}
+        onClick={(event) => {
+          event.target.value = "";
+        }}
+        onChange={(event) => {
+          onFileSelect(event.target.files?.[0]);
+          event.target.value = "";
+        }}
       />
 
       <div className="absolute inset-0 bg-grid bg-[size:40px_40px] opacity-[0.05]" />

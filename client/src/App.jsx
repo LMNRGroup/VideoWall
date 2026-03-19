@@ -10,6 +10,8 @@ const INITIAL_STATE = {
   originalName: "",
   fileName: "",
   mediaKind: null,
+  previewUrl: null,
+  previewRevokeUrl: null,
   metadata: null,
   validation: null,
   job: null
@@ -29,6 +31,72 @@ function formatDetection(validation) {
   }
 
   return `${validation.screens} screen layout detected`;
+}
+
+async function createMediaPreview(file) {
+  if (!file) {
+    return { previewUrl: null, revokeUrl: null };
+  }
+
+  if (file.type.startsWith("image/")) {
+    const objectUrl = URL.createObjectURL(file);
+    return {
+      previewUrl: objectUrl,
+      revokeUrl: objectUrl
+    };
+  }
+
+  if (file.type === "video/mp4") {
+    const tempUrl = URL.createObjectURL(file);
+
+    try {
+      const previewUrl = await new Promise((resolve, reject) => {
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.muted = true;
+        video.playsInline = true;
+        video.src = tempUrl;
+
+        const captureFrame = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 480;
+          canvas.height = 270;
+          const context = canvas.getContext("2d");
+
+          if (!context) {
+            reject(new Error("Preview canvas is not available."));
+            return;
+          }
+
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.72));
+        };
+
+        video.addEventListener("loadeddata", () => {
+          if (Number.isFinite(video.duration) && video.duration > 1) {
+            video.currentTime = Math.min(1, Math.max(0.1, video.duration / 4));
+            return;
+          }
+
+          captureFrame();
+        });
+
+        video.addEventListener("seeked", captureFrame, { once: true });
+        video.addEventListener("error", () => reject(new Error("Video preview could not be generated.")), {
+          once: true
+        });
+      });
+
+      return {
+        previewUrl,
+        revokeUrl: null
+      };
+    } finally {
+      URL.revokeObjectURL(tempUrl);
+    }
+  }
+
+  return { previewUrl: null, revokeUrl: null };
 }
 
 export default function App() {
@@ -66,13 +134,19 @@ export default function App() {
     setProgress(0);
 
     try {
+      const preview = await createMediaPreview(file);
       const data = await uploadVideo(file, setUploadProgress);
       setUploadProgress(100);
+      if (appState.previewRevokeUrl) {
+        URL.revokeObjectURL(appState.previewRevokeUrl);
+      }
       setAppState({
         uploadId: data.uploadId,
         originalName: data.originalName,
         fileName: data.originalName,
         mediaKind: data.mediaKind,
+        previewUrl: preview.previewUrl,
+        previewRevokeUrl: preview.revokeUrl,
         metadata: data.metadata,
         validation: data.validation,
         job: null
@@ -97,6 +171,7 @@ export default function App() {
     }
 
     const uploadId = appState.uploadId;
+    const revokeUrl = appState.previewRevokeUrl;
 
     setAppState(INITIAL_STATE);
     setDragActive(false);
@@ -114,6 +189,10 @@ export default function App() {
         // Ignore cleanup errors during reset.
       }
     }
+
+    if (revokeUrl) {
+      URL.revokeObjectURL(revokeUrl);
+    }
   }
 
   function beginProgress() {
@@ -121,14 +200,14 @@ export default function App() {
       window.clearInterval(progressTimer.current);
     }
 
-    setProgress(9);
+    setProgress(10);
     progressTimer.current = window.setInterval(() => {
       setProgress((current) => {
-        if (current >= 97) {
+        if (current >= 94) {
           return current;
         }
 
-        return current + Math.max(1, Math.round((97 - current) / 10));
+        return current + Math.max(1, Math.round((94 - current) / 9));
       });
     }, 280);
   }
@@ -212,9 +291,9 @@ export default function App() {
       }
 
       pollingTimer.current = window.setTimeout(() => {
-        setProgress((current) => (current < 99 ? current + 1 : current));
+        setProgress((current) => (current < 99 ? current + 2 : current));
         pollJob(jobId);
-      }, 1500);
+      }, 900);
     } catch (error) {
       if (pollingTimer.current) {
         window.clearTimeout(pollingTimer.current);
@@ -333,7 +412,7 @@ export default function App() {
                 </div>
 
                 <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
-                  <GridPreview screens={appState.validation?.screens || 0} />
+                  <GridPreview previewSource={appState.previewUrl} screens={appState.validation?.screens || 0} />
                 </div>
 
                 <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
@@ -411,7 +490,11 @@ export default function App() {
                 </p>
 
                 <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
-                  <GridPreview previews={appState.job?.previews || []} screens={appState.validation?.screens || 0} />
+                  <GridPreview
+                    previews={appState.job?.previews || []}
+                    previewSource={appState.previewUrl}
+                    screens={appState.validation?.screens || 0}
+                  />
                 </div>
 
                 <div className="mt-8 text-sm font-medium text-[#6e6e73]">{appState.job?.zipName}</div>
