@@ -83,13 +83,24 @@ function getBaseVideoFilter(validation, autoFit) {
     return `scale=-2:${TARGET_SLICE_HEIGHT},crop=${validation.targetWidth}:${TARGET_SLICE_HEIGHT}`;
   }
 
+  if (validation.caseType === "perfect") {
+    return "";
+  }
+
   return `scale=${validation.targetWidth}:${TARGET_SLICE_HEIGHT}`;
 }
 
 async function createSlice({ inputPath, outputPath, validation, index, autoFit }) {
   const baseFilter = getBaseVideoFilter(validation, autoFit);
   const cropX = index * TARGET_SLICE_WIDTH;
-  const vf = `${baseFilter},crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0,setsar=1`;
+  const filters = [];
+
+  if (baseFilter) {
+    filters.push(baseFilter);
+  }
+
+  filters.push(`crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0`, "setsar=1");
+  const vf = filters.join(",");
 
   await runProcess("ffmpeg", [
     "-y",
@@ -109,10 +120,13 @@ async function createSlice({ inputPath, outputPath, validation, index, autoFit }
     "zerolatency",
     "-x264-params",
     `threads=${FFMPEG_THREADS}:lookahead-threads=1:sync-lookahead=0:rc-lookahead=0:ref=1`,
+    "-bf",
+    "0",
+    "-g",
+    "30",
     "-pix_fmt",
     "yuv420p",
-    "-c:a",
-    "copy",
+    "-an",
     "-movflags",
     "+faststart",
     outputPath

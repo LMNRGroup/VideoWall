@@ -622,9 +622,17 @@ export default function App() {
                   {currentItem.mediaKind ? ` • ${currentItem.mediaKind}` : ""}
                 </div>
 
-                <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
-                  <GridPreview previewSource={currentItem.previewUrl} screens={currentItem.validation?.screens || 0} />
-                </div>
+                {currentItem.mediaKind !== "video" && (
+                  <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
+                    <GridPreview previewSource={currentItem.previewUrl} screens={currentItem.validation?.screens || 0} />
+                  </div>
+                )}
+
+                {currentItem.mediaKind === "video" && (
+                  <div className="mx-auto mt-10 max-w-2xl rounded-[28px] bg-[#f5f5f7] px-6 py-5 text-sm text-[#6e6e73]">
+                    Screen mockups are hidden for video mode to keep the flow lighter while the wall is generated.
+                  </div>
+                )}
 
                 <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
                   <button
@@ -742,13 +750,21 @@ export default function App() {
                   Review the detected layout and export the ZIP package to your computer.
                 </p>
 
-                <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
-                  <GridPreview
-                    previews={currentItem.job?.previews || []}
-                    previewSource={currentItem.previewUrl}
-                    screens={currentItem.validation?.screens || 0}
-                  />
-                </div>
+                {currentItem.mediaKind !== "video" && (
+                  <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
+                    <GridPreview
+                      previews={currentItem.job?.previews || []}
+                      previewSource={currentItem.previewUrl}
+                      screens={currentItem.validation?.screens || 0}
+                    />
+                  </div>
+                )}
+
+                {currentItem.mediaKind === "video" && (
+                  <div className="mx-auto mt-10 max-w-2xl rounded-[28px] bg-[#f5f5f7] px-6 py-5 text-sm text-[#6e6e73]">
+                    Video preview mockups are skipped in export mode so processing stays focused on the slice outputs.
+                  </div>
+                )}
 
                 <div className="mt-8 text-sm font-medium text-[#6e6e73]">{currentItem.job?.zipName}</div>
 
