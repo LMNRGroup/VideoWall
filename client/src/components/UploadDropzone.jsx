@@ -5,6 +5,7 @@ export default function UploadDropzone({
   dragActive,
   fileName,
   isUploading,
+  multiple = false,
   progress,
   onDragStateChange,
   onFileSelect
@@ -13,9 +14,9 @@ export default function UploadDropzone({
     event.preventDefault();
     onDragStateChange(false);
 
-    const file = event.dataTransfer.files?.[0];
-    if (file) {
-      onFileSelect(file);
+    const files = Array.from(event.dataTransfer.files || []);
+    if (files.length > 0) {
+      onFileSelect(files);
     }
   }
 
@@ -38,12 +39,13 @@ export default function UploadDropzone({
         accept=".mp4,.png,.jpg,.jpeg,video/mp4,image/png,image/jpeg"
         className="hidden"
         disabled={disabled}
+        multiple={multiple}
         type="file"
         onClick={(event) => {
           event.target.value = "";
         }}
         onChange={(event) => {
-          onFileSelect(event.target.files?.[0]);
+          onFileSelect(Array.from(event.target.files || []));
           event.target.value = "";
         }}
       />
@@ -58,7 +60,7 @@ export default function UploadDropzone({
       <div className="relative z-10 mt-6 space-y-3">
         <h2 className="text-3xl font-semibold tracking-tight text-[#1d1d1f]">Upload your media</h2>
         <p className="mx-auto max-w-md text-sm leading-7 text-[#6e6e73]">
-          Drag and drop an `.mp4`, `.png`, `.jpg`, or `.jpeg` file here. Files up to 2GB are supported.
+          Drag and drop up to 10 `.mp4`, `.png`, `.jpg`, or `.jpeg` files here. Files up to 2GB are supported.
         </p>
       </div>
 

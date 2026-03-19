@@ -5,17 +5,7 @@ import InvalidModal from "./components/InvalidModal";
 import UploadDropzone from "./components/UploadDropzone";
 import { deleteUpload, getDownloadUrl, getJobStatus, processVideo, uploadVideo } from "./lib/api";
 
-const INITIAL_STATE = {
-  uploadId: null,
-  originalName: "",
-  fileName: "",
-  mediaKind: null,
-  previewUrl: null,
-  previewRevokeUrl: null,
-  metadata: null,
-  validation: null,
-  job: null
-};
+const MAX_BATCH_FILES = 10;
 
 function formatDimensions(metadata) {
   if (!metadata) {
@@ -99,135 +89,68 @@ async function createMediaPreview(file) {
   return { previewUrl: null, revokeUrl: null };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 export default function App() {
-  const [appState, setAppState] = useState(INITIAL_STATE);
+  const [items, setItems] = useState([]);
   const [dragActive, setDragActive] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadState, setUploadState] = useState({
+    currentIndex: 0,
+    total: 0,
+    fileName: "",
+    progress: 0
+  });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingState, setProcessingState] = useState({
+    currentIndex: 0,
+    total: 0,
+    fileName: ""
+  });
   const [modalOpen, setModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [progress, setProgress] = useState(0);
+  const [simulatedProgress, setSimulatedProgress] = useState(0);
+  const [pendingAutoFitItemId, setPendingAutoFitItemId] = useState(null);
   const progressTimer = useRef(null);
-  const pollingTimer = useRef(null);
+  const itemsRef = useRef([]);
+  const unmounted = useRef(false);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   useEffect(() => {
     return () => {
+      unmounted.current = true;
+
       if (progressTimer.current) {
         window.clearInterval(progressTimer.current);
       }
-      if (pollingTimer.current) {
-        window.clearTimeout(pollingTimer.current);
+
+      for (const item of itemsRef.current) {
+        if (item.previewRevokeUrl) {
+          URL.revokeObjectURL(item.previewRevokeUrl);
+        }
       }
     };
   }, []);
 
-  async function handleFileSelect(file) {
-    if (!file) {
-      return;
-    }
-
-    setErrorMessage("");
-    setIsUploading(true);
-    setUploadProgress(0);
-    setModalOpen(false);
-    setProgress(0);
-    const previousRevokeUrl = appState.previewRevokeUrl;
-    const previewPromise = createMediaPreview(file).catch(() => ({
-      previewUrl: null,
-      revokeUrl: null
-    }));
-
-    try {
-      const data = await uploadVideo(file, setUploadProgress);
-      setUploadProgress(100);
-      if (previousRevokeUrl) {
-        URL.revokeObjectURL(previousRevokeUrl);
-      }
-      setAppState({
-        uploadId: data.uploadId,
-        originalName: data.originalName,
-        fileName: data.originalName,
-        mediaKind: data.mediaKind,
-        previewUrl: null,
-        previewRevokeUrl: null,
-        metadata: data.metadata,
-        validation: data.validation,
-        job: null
-      });
-
-      void previewPromise.then((preview) => {
-        if (!preview?.previewUrl) {
-          return;
-        }
-
-        setAppState((current) => {
-          if (current.uploadId !== data.uploadId) {
-            if (preview.revokeUrl) {
-              URL.revokeObjectURL(preview.revokeUrl);
-            }
-            return current;
-          }
-
-          return {
-            ...current,
-            previewUrl: preview.previewUrl,
-            previewRevokeUrl: preview.revokeUrl
-          };
-        });
-      });
-    } catch (error) {
-      setAppState(INITIAL_STATE);
-      setErrorMessage(error.message);
-      setUploadProgress(0);
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
-  async function resetFlow({ removeRemoteUpload = false } = {}) {
+  function clearProgressTimer() {
     if (progressTimer.current) {
       window.clearInterval(progressTimer.current);
       progressTimer.current = null;
     }
-    if (pollingTimer.current) {
-      window.clearTimeout(pollingTimer.current);
-      pollingTimer.current = null;
-    }
-
-    const uploadId = appState.uploadId;
-    const revokeUrl = appState.previewRevokeUrl;
-
-    setAppState(INITIAL_STATE);
-    setDragActive(false);
-    setIsUploading(false);
-    setUploadProgress(0);
-    setIsProcessing(false);
-    setModalOpen(false);
-    setErrorMessage("");
-    setProgress(0);
-
-    if (removeRemoteUpload && uploadId) {
-      try {
-        await deleteUpload(uploadId);
-      } catch (_error) {
-        // Ignore cleanup errors during reset.
-      }
-    }
-
-    if (revokeUrl) {
-      URL.revokeObjectURL(revokeUrl);
-    }
   }
 
-  function beginProgress() {
-    if (progressTimer.current) {
-      window.clearInterval(progressTimer.current);
-    }
-
-    setProgress(10);
+  function beginItemProgress() {
+    clearProgressTimer();
+    setSimulatedProgress(10);
     progressTimer.current = window.setInterval(() => {
-      setProgress((current) => {
+      setSimulatedProgress((current) => {
         if (current >= 94) {
           return current;
         }
@@ -237,133 +160,310 @@ export default function App() {
     }, 280);
   }
 
-  function completeProgress() {
-    if (progressTimer.current) {
-      window.clearInterval(progressTimer.current);
-      progressTimer.current = null;
-    }
-
-    setProgress(100);
+  function completeItemProgress() {
+    clearProgressTimer();
+    setSimulatedProgress(100);
   }
 
-  async function runProcessing(autoFit = false) {
-    if (!appState.uploadId || !appState.validation) {
+  function updateItem(localId, patch) {
+    setItems((current) =>
+      current.map((item) =>
+        item.localId === localId
+          ? {
+              ...item,
+              ...patch
+            }
+          : item
+      )
+    );
+  }
+
+  async function handleFileSelect(selectedFiles) {
+    const files = Array.from(selectedFiles || []).filter(Boolean);
+
+    if (!files.length) {
       return;
     }
 
-    setModalOpen(false);
+    if (files.length > MAX_BATCH_FILES) {
+      setErrorMessage(`You can upload up to ${MAX_BATCH_FILES} files at a time.`);
+      return;
+    }
+
     setErrorMessage("");
-    setIsProcessing(true);
-    beginProgress();
+    setIsUploading(true);
+    setUploadState({
+      currentIndex: 0,
+      total: files.length,
+      fileName: "",
+      progress: 0
+    });
+
+    const isSingleMode = files.length === 1;
+    const nextItems = [];
 
     try {
-      const data = await processVideo({
-        uploadId: appState.uploadId,
-        originalName: appState.originalName,
-        autoFit
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
+        const localId = `${Date.now()}-${index}-${file.name}`;
+        const previewPromise = isSingleMode
+          ? createMediaPreview(file).catch(() => ({
+              previewUrl: null,
+              revokeUrl: null
+            }))
+          : Promise.resolve({ previewUrl: null, revokeUrl: null });
+
+        setUploadState({
+          currentIndex: index + 1,
+          total: files.length,
+          fileName: file.name,
+          progress: 0
+        });
+
+        const data = await uploadVideo(file, (progress) => {
+          setUploadState({
+            currentIndex: index + 1,
+            total: files.length,
+            fileName: file.name,
+            progress
+          });
+        });
+
+        const uploadedItem = {
+          localId,
+          uploadId: data.uploadId,
+          originalName: data.originalName,
+          fileName: data.originalName,
+          mediaKind: data.mediaKind,
+          previewUrl: null,
+          previewRevokeUrl: null,
+          metadata: data.metadata,
+          validation: data.validation,
+          job: null,
+          error: null
+        };
+
+        nextItems.push(uploadedItem);
+
+        if (isSingleMode) {
+          void previewPromise.then((preview) => {
+            if (!preview?.previewUrl || unmounted.current) {
+              return;
+            }
+
+            setItems((current) =>
+              current.map((item) => {
+                if (item.localId !== localId) {
+                  return item;
+                }
+
+                return {
+                  ...item,
+                  previewUrl: preview.previewUrl,
+                  previewRevokeUrl: preview.revokeUrl
+                };
+              })
+            );
+          });
+        }
+      }
+
+      setItems(nextItems);
+      setUploadState({
+        currentIndex: files.length,
+        total: files.length,
+        fileName: files[files.length - 1]?.name || "",
+        progress: 100
       });
-      setAppState((current) => ({
-        ...current,
-        validation: data.validation,
-        mediaKind: data.mediaKind || current.mediaKind,
-        job: data.job
-      }));
-      pollJob(data.job.id);
     } catch (error) {
+      for (const item of nextItems) {
+        if (item.uploadId) {
+          await deleteUpload(item.uploadId).catch(() => {});
+        }
+      }
+
+      setItems([]);
       setErrorMessage(error.message);
-      setProgress(0);
-      setIsProcessing(false);
+      setUploadState({
+        currentIndex: 0,
+        total: files.length,
+        fileName: "",
+        progress: 0
+      });
+    } finally {
+      setIsUploading(false);
     }
   }
 
-  async function pollJob(jobId) {
-    try {
+  async function resetFlow({ removeRemoteUploads = false } = {}) {
+    clearProgressTimer();
+
+    const currentItems = [...items];
+    setItems([]);
+    setDragActive(false);
+    setIsUploading(false);
+    setIsProcessing(false);
+    setUploadState({
+      currentIndex: 0,
+      total: 0,
+      fileName: "",
+      progress: 0
+    });
+    setProcessingState({
+      currentIndex: 0,
+      total: 0,
+      fileName: ""
+    });
+    setModalOpen(false);
+    setPendingAutoFitItemId(null);
+    setErrorMessage("");
+    setSimulatedProgress(0);
+
+    if (removeRemoteUploads) {
+      await Promise.all(
+        currentItems.map((item) => {
+          if (!item.uploadId || item.job) {
+            return Promise.resolve();
+          }
+
+          return deleteUpload(item.uploadId).catch(() => {});
+        })
+      );
+    }
+
+    for (const item of currentItems) {
+      if (item.previewRevokeUrl) {
+        URL.revokeObjectURL(item.previewRevokeUrl);
+      }
+    }
+  }
+
+  async function waitForJob(jobId, onTick) {
+    while (!unmounted.current) {
       const data = await getJobStatus(jobId);
 
       if (data.job.status === "completed") {
-        if (pollingTimer.current) {
-          window.clearTimeout(pollingTimer.current);
-          pollingTimer.current = null;
-        }
-        completeProgress();
-        setIsProcessing(false);
-        setAppState((current) => ({
-          ...current,
-          validation: data.validation,
-          mediaKind: data.mediaKind || current.mediaKind,
-          job: data.job
-        }));
-        return;
+        return data;
       }
 
       if (data.job.status === "failed") {
-        if (pollingTimer.current) {
-          window.clearTimeout(pollingTimer.current);
-          pollingTimer.current = null;
-        }
-        if (progressTimer.current) {
-          window.clearInterval(progressTimer.current);
-          progressTimer.current = null;
-        }
-        setProgress(0);
-        setErrorMessage(data.job.error || "Processing failed.");
-        setIsProcessing(false);
-        setAppState((current) => ({
-          ...current,
-          job: null
-        }));
-        return;
+        throw new Error(data.job.error || "Processing failed.");
       }
 
-      pollingTimer.current = window.setTimeout(() => {
-        setProgress((current) => (current < 99 ? current + 2 : current));
-        pollJob(jobId);
-      }, 900);
-    } catch (error) {
-      if (pollingTimer.current) {
-        window.clearTimeout(pollingTimer.current);
-        pollingTimer.current = null;
+      if (typeof onTick === "function") {
+        onTick();
       }
-      if (progressTimer.current) {
-        window.clearInterval(progressTimer.current);
-        progressTimer.current = null;
-      }
-      setProgress(0);
-      setErrorMessage(error.message || "Processing status could not be checked.");
-      setIsProcessing(false);
-      setAppState((current) => ({
-        ...current,
-        job: null
-      }));
+
+      await sleep(900);
     }
+
+    throw new Error("Processing was interrupted.");
   }
 
-  function handleGenerate() {
-    if (!appState.validation) {
+  async function runBatchProcessing({ singleAutoFit = false } = {}) {
+    if (!items.length) {
       return;
     }
 
-    if (appState.validation.needsAutoFit && appState.validation.status === "invalid") {
+    setErrorMessage("");
+    setModalOpen(false);
+    setPendingAutoFitItemId(null);
+    setIsProcessing(true);
+
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      const autoFit = items.length > 1 ? Boolean(item.validation?.needsAutoFit) : singleAutoFit;
+
+      setProcessingState({
+        currentIndex: index + 1,
+        total: items.length,
+        fileName: item.fileName
+      });
+      beginItemProgress();
+
+      try {
+        const queued = await processVideo({
+          uploadId: item.uploadId,
+          originalName: item.originalName,
+          autoFit
+        });
+
+        const result = await waitForJob(queued.job.id, () => {
+          setSimulatedProgress((current) => (current < 99 ? current + 2 : current));
+        });
+
+        completeItemProgress();
+        updateItem(item.localId, {
+          validation: result.validation,
+          mediaKind: result.mediaKind || item.mediaKind,
+          job: result.job,
+          error: null
+        });
+      } catch (error) {
+        clearProgressTimer();
+        updateItem(item.localId, {
+          error: error.message,
+          job: null
+        });
+      }
+    }
+
+    clearProgressTimer();
+    setSimulatedProgress(100);
+    setIsProcessing(false);
+  }
+
+  function handleGenerate() {
+    if (!items.length) {
+      return;
+    }
+
+    if (items.length === 1 && items[0].validation?.needsAutoFit && items[0].validation?.status === "invalid") {
+      setPendingAutoFitItemId(items[0].localId);
       setModalOpen(true);
       return;
     }
 
-    runProcessing(false);
+    runBatchProcessing();
   }
 
-  const downloadUrl = getDownloadUrl(appState.job?.downloadUrl);
-  const showLanding = !appState.validation && !isProcessing && !appState.job;
-  const showDetected = !!appState.validation && !isProcessing && !appState.job;
+  const isBatchMode = items.length > 1;
+  const currentItem = items[0] || null;
+  const hasUploads = items.length > 0;
+  const hasResults = items.some((item) => item.job || item.error);
+  const showLanding = !hasUploads && !isUploading && !isProcessing;
+  const showReady = hasUploads && !isProcessing && !hasResults;
   const showProcessing = isProcessing;
-  const showExport = !!appState.job && !isProcessing;
+  const showExport = hasUploads && !isProcessing && hasResults;
+
+  const overallProgress = showProcessing
+    ? Math.min(
+        100,
+        Math.round(
+          ((((processingState.currentIndex || 1) - 1) + simulatedProgress / 100) / Math.max(processingState.total || 1, 1)) *
+            100
+        )
+      )
+    : 0;
+
+  const completedCount = items.filter((item) => item.job).length;
 
   return (
     <div className="min-h-screen bg-[#f5f5f7] text-[#3a3a3c]">
       <InvalidModal
-        message={appState.validation?.message}
+        message={currentItem?.validation?.message}
         open={modalOpen}
-        onCancel={() => setModalOpen(false)}
-        onConfirm={() => runProcessing(true)}
+        onCancel={() => {
+          setModalOpen(false);
+          setPendingAutoFitItemId(null);
+        }}
+        onConfirm={() => {
+          if (!pendingAutoFitItemId) {
+            return;
+          }
+
+          runBatchProcessing({ singleAutoFit: true });
+        }}
       />
 
       <div className="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-8 lg:px-10">
@@ -378,7 +478,7 @@ export default function App() {
 
         <main className="flex flex-1 items-center justify-center">
           <section className="w-full max-w-4xl">
-            {showLanding && (
+            {(showLanding || isUploading) && (
               <div className="space-y-6">
                 <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-10">
                   <div className="mx-auto max-w-2xl text-center">
@@ -386,8 +486,7 @@ export default function App() {
                       Create a Video Wall.
                     </h2>
                     <p className="mx-auto mt-5 max-w-xl text-sm leading-6 text-[#6e6e73]">
-                      Upload one video or image and the system will detect the wall layout, slice every screen, and
-                      prepare a ZIP export.
+                      Upload one file or batch up to 10 videos and images to generate video wall exports.
                     </p>
                   </div>
 
@@ -395,9 +494,14 @@ export default function App() {
                     <UploadDropzone
                       disabled={isUploading}
                       dragActive={dragActive}
-                      fileName={appState.fileName}
+                      fileName={
+                        isUploading
+                          ? `${uploadState.fileName || "Uploading"} (${uploadState.currentIndex}/${uploadState.total})`
+                          : ""
+                      }
                       isUploading={isUploading}
-                      progress={uploadProgress}
+                      multiple
+                      progress={uploadState.progress}
                       onDragStateChange={setDragActive}
                       onFileSelect={handleFileSelect}
                     />
@@ -422,36 +526,33 @@ export default function App() {
               </div>
             )}
 
-            {showDetected && (
+            {showReady && !isBatchMode && currentItem && (
               <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 text-center shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-12">
                 <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Detected Layout</p>
                 <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#3a3a3c] sm:text-5xl">
-                  {formatDetection(appState.validation)}
+                  {formatDetection(currentItem.validation)}
                 </h2>
-                <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#515154]">
-                  {appState.validation?.message}
-                </p>
+                <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#515154]">{currentItem.validation?.message}</p>
                 <div className="mt-6 text-sm font-medium text-[#6e6e73]">
-                  {formatDimensions(appState.metadata)}
-                  {appState.mediaKind ? ` • ${appState.mediaKind}` : ""}
+                  {formatDimensions(currentItem.metadata)}
+                  {currentItem.mediaKind ? ` • ${currentItem.mediaKind}` : ""}
                 </div>
 
                 <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
-                  <GridPreview previewSource={appState.previewUrl} screens={appState.validation?.screens || 0} />
+                  <GridPreview previewSource={currentItem.previewUrl} screens={currentItem.validation?.screens || 0} />
                 </div>
 
                 <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
                   <button
                     className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#3a3a3c] transition hover:bg-[#f5f5f7]"
                     type="button"
-                    onClick={() => resetFlow({ removeRemoteUpload: true })}
+                    onClick={() => resetFlow({ removeRemoteUploads: true })}
                   >
                     <ArrowLeft className="h-4 w-4" />
                     Go Back
                   </button>
                   <button
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0071e3] px-8 py-3 text-sm font-semibold text-white shadow-[0_18px_30px_rgba(0,113,227,0.25)] transition hover:bg-[#0077ed] disabled:cursor-not-allowed disabled:bg-[#7ab8f5]"
-                    disabled={isProcessing}
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0071e3] px-8 py-3 text-sm font-semibold text-white shadow-[0_18px_30px_rgba(0,113,227,0.25)] transition hover:bg-[#0077ed]"
                     type="button"
                     onClick={handleGenerate}
                   >
@@ -459,13 +560,61 @@ export default function App() {
                     Generate Video Wall
                   </button>
                 </div>
+              </div>
+            )}
 
-                {errorMessage && (
-                  <div className="mx-auto mt-6 flex max-w-2xl items-start gap-3 rounded-[28px] border border-[#f5c2c7] bg-[#fff2f4] p-4 text-left text-sm text-[#b42318]">
-                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                    <span>{errorMessage}</span>
-                  </div>
-                )}
+            {showReady && isBatchMode && (
+              <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-12">
+                <div className="text-center">
+                  <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Batch Ready</p>
+                  <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#3a3a3c] sm:text-5xl">
+                    {items.length} files ready to generate
+                  </h2>
+                  <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[#6e6e73]">
+                    Batch mode skips screen previews and processes each file sequentially. Invalid ratios will auto-fit
+                    automatically when needed.
+                  </p>
+                </div>
+
+                <div className="mt-10 overflow-hidden rounded-[28px] border border-[#e2e2e7]">
+                  {items.map((item, index) => (
+                    <div
+                      key={item.localId}
+                      className={`flex items-center justify-between gap-4 bg-white px-6 py-4 ${
+                        index !== items.length - 1 ? "border-b border-[#ececf1]" : ""
+                      }`}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-[#3a3a3c]">{item.fileName}</p>
+                        <p className="mt-1 text-sm text-[#6e6e73]">
+                          {item.validation?.screens} screens • {formatDimensions(item.metadata)}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[#f5f5f7] px-3 py-1 text-xs font-medium text-[#6e6e73]">
+                        Ready
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#3a3a3c] transition hover:bg-[#f5f5f7]"
+                    type="button"
+                    onClick={() => resetFlow({ removeRemoteUploads: true })}
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Go Back
+                  </button>
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0071e3] px-8 py-3 text-sm font-semibold text-white shadow-[0_18px_30px_rgba(0,113,227,0.25)] transition hover:bg-[#0077ed]"
+                    type="button"
+                    onClick={handleGenerate}
+                  >
+                    <Wand2 className="h-4 w-4" />
+                    Generate {items.length} Video Walls
+                  </button>
+                </div>
               </div>
             )}
 
@@ -479,7 +628,9 @@ export default function App() {
                   Processing your media
                 </h2>
                 <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#515154]">
-                  Your wall is being prepared now. Keep this page open while the slices and ZIP export are generated.
+                  {processingState.fileName
+                    ? `Working on ${processingState.fileName} (${processingState.currentIndex} of ${processingState.total}).`
+                    : "Preparing your video wall exports."}
                 </p>
 
                 <div className="mx-auto mt-10 max-w-2xl">
@@ -487,24 +638,17 @@ export default function App() {
                     <div
                       className="relative h-full rounded-full transition-all duration-500 after:absolute after:inset-0 after:bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.28),transparent)] after:animate-[shimmer_1.6s_linear_infinite]"
                       style={{
-                        width: `${progress}%`,
+                        width: `${overallProgress}%`,
                         background: "linear-gradient(90deg, #2f8cff 0%, #0a84ff 50%, #4da3ff 100%)"
                       }}
                     />
                   </div>
-                  <p className="mt-4 text-sm font-medium text-[#515154]">{progress}% complete</p>
+                  <p className="mt-4 text-sm font-medium text-[#515154]">{overallProgress}% complete</p>
                 </div>
-
-                {errorMessage && (
-                  <div className="mx-auto mt-6 flex max-w-2xl items-start gap-3 rounded-[28px] border border-[#f5c2c7] bg-[#fff2f4] p-4 text-left text-sm text-[#b42318]">
-                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                    <span>{errorMessage}</span>
-                  </div>
-                )}
               </div>
             )}
 
-            {showExport && (
+            {showExport && !isBatchMode && currentItem && (
               <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 text-center shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-12">
                 <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Export Ready</p>
                 <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#3a3a3c] sm:text-5xl">
@@ -516,22 +660,31 @@ export default function App() {
 
                 <div className="mx-auto mt-10 max-w-2xl rounded-[32px] bg-[#f5f5f7] p-6">
                   <GridPreview
-                    previews={appState.job?.previews || []}
-                    previewSource={appState.previewUrl}
-                    screens={appState.validation?.screens || 0}
+                    previews={currentItem.job?.previews || []}
+                    previewSource={currentItem.previewUrl}
+                    screens={currentItem.validation?.screens || 0}
                   />
                 </div>
 
-                <div className="mt-8 text-sm font-medium text-[#6e6e73]">{appState.job?.zipName}</div>
+                <div className="mt-8 text-sm font-medium text-[#6e6e73]">{currentItem.job?.zipName}</div>
+
+                {currentItem.error && (
+                  <div className="mx-auto mt-6 flex max-w-2xl items-start gap-3 rounded-[28px] border border-[#f5c2c7] bg-[#fff2f4] p-4 text-left text-sm text-[#b42318]">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                    <span>{currentItem.error}</span>
+                  </div>
+                )}
 
                 <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-                  <a
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0071e3] px-8 py-3 text-sm font-semibold text-white shadow-[0_18px_30px_rgba(0,113,227,0.25)] transition hover:bg-[#0077ed]"
-                    href={downloadUrl}
-                  >
-                    <Download className="h-4 w-4" />
-                    Export Video Wall
-                  </a>
+                  {currentItem.job && (
+                    <a
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0071e3] px-8 py-3 text-sm font-semibold text-white shadow-[0_18px_30px_rgba(0,113,227,0.25)] transition hover:bg-[#0077ed]"
+                      href={getDownloadUrl(currentItem.job.downloadUrl)}
+                    >
+                      <Download className="h-4 w-4" />
+                      Export Video Wall
+                    </a>
+                  )}
                   <button
                     className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#3a3a3c] transition hover:bg-[#f5f5f7]"
                     type="button"
@@ -541,6 +694,69 @@ export default function App() {
                     Generate Another
                   </button>
                 </div>
+              </div>
+            )}
+
+            {showExport && isBatchMode && (
+              <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-12">
+                <div className="text-center">
+                  <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Batch Export</p>
+                  <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#3a3a3c] sm:text-5xl">
+                    {completedCount} of {items.length} video walls ready
+                  </h2>
+                  <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[#6e6e73]">
+                    Download each finished ZIP individually. Failed files can be retried in a new batch.
+                  </p>
+                </div>
+
+                <div className="mt-10 space-y-4">
+                  {items.map((item) => (
+                    <div
+                      key={item.localId}
+                      className="flex flex-col gap-4 rounded-[28px] border border-[#e2e2e7] bg-[#fbfbfd] px-6 py-5 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div>
+                        <p className="text-base font-semibold text-[#3a3a3c]">{item.fileName}</p>
+                        <p className="mt-1 text-sm text-[#6e6e73]">
+                          {item.validation?.screens} screens • {formatDimensions(item.metadata)}
+                        </p>
+                        {item.error && <p className="mt-2 text-sm text-[#b42318]">{item.error}</p>}
+                      </div>
+
+                      {item.job ? (
+                        <a
+                          className="inline-flex items-center justify-center gap-2 rounded-full bg-[#0071e3] px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_30px_rgba(0,113,227,0.22)] transition hover:bg-[#0077ed]"
+                          href={getDownloadUrl(item.job.downloadUrl)}
+                        >
+                          <Download className="h-4 w-4" />
+                          Export {item.fileName}
+                        </a>
+                      ) : (
+                        <span className="rounded-full bg-[#fff2f4] px-4 py-2 text-sm font-medium text-[#b42318]">
+                          Failed
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-10 flex justify-center">
+                  <button
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-[#d2d2d7] bg-white px-6 py-3 text-sm font-semibold text-[#3a3a3c] transition hover:bg-[#f5f5f7]"
+                    type="button"
+                    onClick={() => resetFlow()}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Generate Another Batch
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!showLanding && !isUploading && errorMessage && !showProcessing && (
+              <div className="mx-auto mt-6 flex max-w-2xl items-start gap-3 rounded-[28px] border border-[#f5c2c7] bg-[#fff2f4] p-4 text-sm text-[#b42318]">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                <span>{errorMessage}</span>
               </div>
             )}
           </section>
