@@ -265,7 +265,7 @@ export default function App() {
         <header className="flex justify-center py-5">
           <div className="text-center">
             <p className="text-xs font-medium uppercase tracking-[0.42em] text-[#8e8e93]">Luminar Apps</p>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#a9aaae] [text-shadow:1px_1px_0_rgba(82,82,91,0.18)] sm:text-4xl">
+            <h1 className="mt-4 bg-[linear-gradient(180deg,#f8e7a3_0%,#d6b45f_45%,#a67c22_100%)] bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl">
               LumosDS
             </h1>
           </div>
@@ -277,11 +277,10 @@ export default function App() {
               <div className="space-y-6">
                 <div className="rounded-[40px] border border-[#d2d2d7] bg-white p-8 shadow-[0_30px_80px_rgba(0,0,0,0.08)] sm:p-10">
                   <div className="mx-auto max-w-2xl text-center">
-                    <p className="text-sm font-medium uppercase tracking-[0.28em] text-[#6e6e73]">Upload Media</p>
                     <h2 className="mt-4 text-4xl font-semibold tracking-tight text-[#3a3a3c] sm:text-5xl">
                       Create a Video Wall.
                     </h2>
-                    <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#6e6e73]">
+                    <p className="mx-auto mt-5 max-w-xl text-sm leading-6 text-[#6e6e73]">
                       Upload one video or image and the system will detect the wall layout, slice every screen, and
                       prepare a ZIP export.
                     </p>
@@ -307,7 +306,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="mx-auto max-w-3xl rounded-[32px] border border-[#d2d2d7] bg-white px-8 py-7 text-center shadow-[0_18px_48px_rgba(0,0,0,0.06)]">
+                <div className="rounded-[32px] border border-[#d2d2d7] bg-white px-8 py-7 text-center shadow-[0_18px_48px_rgba(0,0,0,0.06)]">
                   <p className="text-sm font-medium uppercase tracking-[0.24em] text-[#6e6e73]">Best Results</p>
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-4 text-sm text-[#6e6e73]">
                     <span className="rounded-full bg-[#f5f5f7] px-4 py-2">2 screens {"->"} 3840x1080</span>
