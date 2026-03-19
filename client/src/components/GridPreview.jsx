@@ -12,7 +12,7 @@ export default function GridPreview({ screens = 0, previews = [], previewSource 
       <div className="flex items-center gap-0 overflow-hidden">
         {Array.from({ length: count || 1 }, (_, index) => (
           <div key={index} className="min-w-0 flex-1">
-            <div className="border border-[#101114] bg-[#0f1012] p-[3px] shadow-[0_8px_16px_rgba(0,0,0,0.14)]">
+            <div className="border border-[#101114] bg-[#0f1012] p-[1.5px] shadow-[0_8px_16px_rgba(0,0,0,0.12)]">
               <div className="relative aspect-video overflow-hidden bg-[#17181c]">
                 {previewCount > 0 && previews[index] ? (
                   <img
