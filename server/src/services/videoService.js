@@ -1,7 +1,15 @@
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { v4 as uuidv4 } from "uuid";
-import { OUTPUT_DIR, TARGET_SLICE_HEIGHT, TARGET_SLICE_WIDTH, UPLOAD_DIR } from "../config/constants.js";
+import {
+  FFMPEG_CRF,
+  FFMPEG_PRESET,
+  FFMPEG_THREADS,
+  OUTPUT_DIR,
+  TARGET_SLICE_HEIGHT,
+  TARGET_SLICE_WIDTH,
+  UPLOAD_DIR
+} from "../config/constants.js";
 import { createZipArchive } from "./zipService.js";
 import { ensureDir, getBaseNameWithoutExtension, removePath } from "../utils/fs.js";
 
@@ -20,13 +28,23 @@ function runProcess(command, args) {
     });
 
     child.on("error", reject);
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       if (code === 0) {
         resolve({ stdout, stderr });
         return;
       }
 
-      reject(new Error(`${command} exited with code ${code}: ${stderr || stdout}`));
+      const detail = stderr || stdout || "No process output captured.";
+      if (signal) {
+        reject(
+          new Error(
+            `${command} was terminated by signal ${signal}. This usually means the container ran out of memory or CPU while processing the media.\n${detail}`
+          )
+        );
+        return;
+      }
+
+      reject(new Error(`${command} exited with code ${code}: ${detail}`));
     });
   });
 }
@@ -75,6 +93,8 @@ async function createSlice({ inputPath, outputPath, validation, index, autoFit }
 
   await runProcess("ffmpeg", [
     "-y",
+    "-threads",
+    String(FFMPEG_THREADS),
     "-i",
     inputPath,
     "-vf",
@@ -82,15 +102,13 @@ async function createSlice({ inputPath, outputPath, validation, index, autoFit }
     "-c:v",
     "libx264",
     "-preset",
-    "medium",
+    FFMPEG_PRESET,
     "-crf",
-    "20",
+    String(FFMPEG_CRF),
     "-pix_fmt",
     "yuv420p",
     "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
+    "copy",
     "-movflags",
     "+faststart",
     outputPath
