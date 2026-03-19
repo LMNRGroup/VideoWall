@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ArrowLeft, Download, LoaderCircle, RotateCcw, Wand2 } from "lucide-react";
+import DebugPanel from "./components/DebugPanel";
 import GridPreview from "./components/GridPreview";
 import InvalidModal from "./components/InvalidModal";
 import UploadDropzone from "./components/UploadDropzone";
@@ -95,6 +96,28 @@ function sleep(ms) {
   });
 }
 
+function normalizeError(error) {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      details: error.stack || error.message
+    };
+  }
+
+  if (typeof error === "string") {
+    return {
+      message: error,
+      details: error
+    };
+  }
+
+  const serialized = JSON.stringify(error, null, 2);
+  return {
+    message: serialized || "Unexpected error",
+    details: serialized || "Unexpected error"
+  };
+}
+
 export default function App() {
   const [items, setItems] = useState([]);
   const [dragActive, setDragActive] = useState(false);
@@ -113,6 +136,8 @@ export default function App() {
   });
   const [modalOpen, setModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [debugEntries, setDebugEntries] = useState([]);
+  const [expandedDebugIds, setExpandedDebugIds] = useState([]);
   const [simulatedProgress, setSimulatedProgress] = useState(0);
   const [pendingAutoFitItemId, setPendingAutoFitItemId] = useState(null);
   const progressTimer = useRef(null);
@@ -123,9 +148,47 @@ export default function App() {
     itemsRef.current = items;
   }, [items]);
 
+  function pushDebugEntry(title, error, context = {}) {
+    const normalized = normalizeError(error);
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const details = [
+      `Message: ${normalized.message}`,
+      Object.keys(context).length ? `Context: ${JSON.stringify(context, null, 2)}` : null,
+      normalized.details ? `Trace: ${normalized.details}` : null
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    setDebugEntries((current) =>
+      [
+        {
+          id,
+          title,
+          message: normalized.message,
+          details,
+          timestamp: Date.now()
+        },
+        ...current
+      ].slice(0, 6)
+    );
+  }
+
   useEffect(() => {
+    function handleWindowError(event) {
+      pushDebugEntry("Unhandled Error", event.error || event.message || "Unknown window error");
+    }
+
+    function handlePromiseRejection(event) {
+      pushDebugEntry("Unhandled Promise Rejection", event.reason || "Unknown promise rejection");
+    }
+
+    window.addEventListener("error", handleWindowError);
+    window.addEventListener("unhandledrejection", handlePromiseRejection);
+
     return () => {
       unmounted.current = true;
+      window.removeEventListener("error", handleWindowError);
+      window.removeEventListener("unhandledrejection", handlePromiseRejection);
 
       if (progressTimer.current) {
         window.clearInterval(progressTimer.current);
@@ -186,7 +249,12 @@ export default function App() {
     }
 
     if (files.length > MAX_BATCH_FILES) {
-      setErrorMessage(`You can upload up to ${MAX_BATCH_FILES} files at a time.`);
+      const message = `You can upload up to ${MAX_BATCH_FILES} files at a time.`;
+      setErrorMessage(message);
+      pushDebugEntry("Batch Upload Limit", message, {
+        selectedFiles: files.length,
+        maxFiles: MAX_BATCH_FILES
+      });
       return;
     }
 
@@ -284,6 +352,9 @@ export default function App() {
 
       setItems([]);
       setErrorMessage(error.message);
+      pushDebugEntry("Upload Failed", error, {
+        attemptedFiles: files.map((file) => file.name)
+      });
       setUploadState({
         currentIndex: 0,
         total: files.length,
@@ -340,7 +411,14 @@ export default function App() {
 
   async function waitForJob(jobId, onTick) {
     while (!unmounted.current) {
-      const data = await getJobStatus(jobId);
+      let data;
+
+      try {
+        data = await getJobStatus(jobId);
+      } catch (error) {
+        pushDebugEntry("Status Poll Failed", error, { jobId });
+        throw error;
+      }
 
       if (data.job.status === "completed") {
         return data;
@@ -404,6 +482,12 @@ export default function App() {
         updateItem(item.localId, {
           error: error.message,
           job: null
+        });
+        pushDebugEntry("Generation Failed", error, {
+          fileName: item.fileName,
+          uploadId: item.uploadId,
+          batchIndex: index + 1,
+          batchTotal: items.length
         });
       }
     }
@@ -764,6 +848,20 @@ export default function App() {
 
         <footer className="pt-8 text-center text-[11px] font-medium text-[#86868b]">© 2026 Luminar Apps Puerto Rico</footer>
       </div>
+
+      <DebugPanel
+        entries={debugEntries}
+        expandedIds={expandedDebugIds}
+        onClose={(id) => {
+          setDebugEntries((current) => current.filter((entry) => entry.id !== id));
+          setExpandedDebugIds((current) => current.filter((entryId) => entryId !== id));
+        }}
+        onToggle={(id) => {
+          setExpandedDebugIds((current) =>
+            current.includes(id) ? current.filter((entryId) => entryId !== id) : [...current, id]
+          );
+        }}
+      />
     </div>
   );
 }
