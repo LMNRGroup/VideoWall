@@ -9,11 +9,11 @@ export default function GridPreview({ screens = 0, previews = [], previewSource 
       <div className="mb-5 w-fit rounded-full border border-[#d2d2d7] bg-white px-3 py-1 text-xs font-medium text-[#6e6e73]">
         {count || 0} screens
       </div>
-      <div className="flex items-center gap-[2px] overflow-hidden rounded-[22px] bg-[#ececf1] p-3">
+      <div className="flex items-center gap-0 overflow-hidden">
         {Array.from({ length: count || 1 }, (_, index) => (
           <div key={index} className="min-w-0 flex-1">
-            <div className="rounded-[14px] bg-[#101114] p-[4px] shadow-[0_10px_20px_rgba(0,0,0,0.18)]">
-              <div className="relative aspect-video overflow-hidden rounded-[10px] bg-[#17181c]">
+            <div className="border border-[#101114] bg-[#0f1012] p-[3px] shadow-[0_8px_16px_rgba(0,0,0,0.14)]">
+              <div className="relative aspect-video overflow-hidden bg-[#17181c]">
                 {previewCount > 0 && previews[index] ? (
                   <img
                     alt={`Screen preview ${index + 1}`}

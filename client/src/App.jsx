@@ -132,24 +132,49 @@ export default function App() {
     setUploadProgress(0);
     setModalOpen(false);
     setProgress(0);
+    const previousRevokeUrl = appState.previewRevokeUrl;
+    const previewPromise = createMediaPreview(file).catch(() => ({
+      previewUrl: null,
+      revokeUrl: null
+    }));
 
     try {
-      const preview = await createMediaPreview(file);
       const data = await uploadVideo(file, setUploadProgress);
       setUploadProgress(100);
-      if (appState.previewRevokeUrl) {
-        URL.revokeObjectURL(appState.previewRevokeUrl);
+      if (previousRevokeUrl) {
+        URL.revokeObjectURL(previousRevokeUrl);
       }
       setAppState({
         uploadId: data.uploadId,
         originalName: data.originalName,
         fileName: data.originalName,
         mediaKind: data.mediaKind,
-        previewUrl: preview.previewUrl,
-        previewRevokeUrl: preview.revokeUrl,
+        previewUrl: null,
+        previewRevokeUrl: null,
         metadata: data.metadata,
         validation: data.validation,
         job: null
+      });
+
+      void previewPromise.then((preview) => {
+        if (!preview?.previewUrl) {
+          return;
+        }
+
+        setAppState((current) => {
+          if (current.uploadId !== data.uploadId) {
+            if (preview.revokeUrl) {
+              URL.revokeObjectURL(preview.revokeUrl);
+            }
+            return current;
+          }
+
+          return {
+            ...current,
+            previewUrl: preview.previewUrl,
+            previewRevokeUrl: preview.revokeUrl
+          };
+        });
       });
     } catch (error) {
       setAppState(INITIAL_STATE);
