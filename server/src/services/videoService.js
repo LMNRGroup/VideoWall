@@ -90,17 +90,18 @@ function getBaseVideoFilter(validation, autoFit) {
   return `scale=${validation.targetWidth}:${TARGET_SLICE_HEIGHT}`;
 }
 
+function buildVideoFilter(...filters) {
+  return filters.filter(Boolean).join(",");
+}
+
 async function createSlice({ inputPath, outputPath, validation, index, autoFit }) {
   const baseFilter = getBaseVideoFilter(validation, autoFit);
   const cropX = index * TARGET_SLICE_WIDTH;
-  const filters = [];
-
-  if (baseFilter) {
-    filters.push(baseFilter);
-  }
-
-  filters.push(`crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0`, "setsar=1");
-  const vf = filters.join(",");
+  const vf = buildVideoFilter(
+    baseFilter,
+    `crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0`,
+    "setsar=1"
+  );
 
   await runProcess("ffmpeg", [
     "-y",
@@ -136,7 +137,7 @@ async function createSlice({ inputPath, outputPath, validation, index, autoFit }
 async function createImageSlice({ inputPath, outputPath, validation, index, autoFit }) {
   const baseFilter = getBaseVideoFilter(validation, autoFit);
   const cropX = index * TARGET_SLICE_WIDTH;
-  const vf = `${baseFilter},crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0`;
+  const vf = buildVideoFilter(baseFilter, `crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0`);
 
   await runProcess("ffmpeg", [
     "-y",
@@ -153,7 +154,11 @@ async function createImageSlice({ inputPath, outputPath, validation, index, auto
 async function createPreviewSlice({ inputPath, outputPath, validation, index, autoFit, mediaKind }) {
   const baseFilter = getBaseVideoFilter(validation, autoFit);
   const cropX = index * TARGET_SLICE_WIDTH;
-  const vf = `${baseFilter},crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0,scale=220:-1`;
+  const vf = buildVideoFilter(
+    baseFilter,
+    `crop=${TARGET_SLICE_WIDTH}:${TARGET_SLICE_HEIGHT}:${cropX}:0`,
+    "scale=220:-1"
+  );
   const args = ["-y"];
 
   args.push("-i", inputPath, "-vf", vf, "-frames:v", "1", outputPath);
