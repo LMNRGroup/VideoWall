@@ -91,6 +91,7 @@ function getBaseVideoFilter(validation, autoFit) {
 }
 
 function buildVideoFilter(...filters) {
+  // Drop empty stages so FFmpeg always receives a valid filter chain.
   return filters.filter(Boolean).join(",");
 }
 
